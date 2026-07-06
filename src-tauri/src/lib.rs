@@ -271,8 +271,10 @@ pub fn run() {
     if std::env::var_os("GDK_BACKEND").is_none() {
         std::env::set_var("GDK_BACKEND", "wayland");
     }
-    // Improves transparency reliability on some webkit2gtk builds.
-    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    // NOTE: we intentionally do NOT set WEBKIT_DISABLE_DMABUF_RENDERER — with
+    // the SHM fallback renderer, moving sprite frames leave trails on the
+    // transparent surface (damage tracking breaks). The DMABUF renderer paints
+    // cleanly.
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![

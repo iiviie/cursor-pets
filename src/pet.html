@@ -21,7 +21,6 @@
       window.addEventListener("unhandledrejection", (e) =>
         showErr("REJECT: " + (e.reason && (e.reason.stack || e.reason.message || e.reason)))
       );
-      showErr("TAURI global: " + (typeof window.__TAURI__));
     </script>
     <script type="module" src="pet.js"></script>
   </body>
