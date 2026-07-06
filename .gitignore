@@ -1,0 +1,17 @@
+# Rust / Tauri build artifacts
+/src-tauri/target/
+target/
+
+# Tauri generated
+/src-tauri/gen/schemas/
+
+# Runtime config written by the app
+config.json
+
+# OS / editor cruft
+.DS_Store
+*.swp
+*~
+
+# Logs
+*.log

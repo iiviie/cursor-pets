@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>cursorpet-overlay</title>
+    <link rel="stylesheet" href="pet.css" />
+  </head>
+  <body>
+    <canvas id="pet"></canvas>
+    <pre id="err"></pre>
+    <script>
+      // DEBUG: surface any error in-page so headless screenshots reveal it.
+      const showErr = (msg) => {
+        const el = document.getElementById("err");
+        if (el) el.textContent += msg + "\n";
+      };
+      window.addEventListener("error", (e) =>
+        showErr("ERR: " + (e.message || e.error) + " @ " + e.filename + ":" + e.lineno)
+      );
+      window.addEventListener("unhandledrejection", (e) =>
+        showErr("REJECT: " + (e.reason && (e.reason.stack || e.reason.message || e.reason)))
+      );
+      showErr("TAURI global: " + (typeof window.__TAURI__));
+    </script>
+    <script type="module" src="pet.js"></script>
+  </body>
+</html>

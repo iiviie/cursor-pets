@@ -1,0 +1,39 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  /* The whole overlay is click-through at the OS level, but make doubly sure
+     nothing here ever wants pointer input. */
+  pointer-events: none;
+  user-select: none;
+  cursor: default;
+}
+
+#pet {
+  position: fixed;
+  left: 0;
+  top: 0;
+  /* Positioned each frame via transform for cheap, compositor-driven motion. */
+  will-change: transform;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+}
+
+#err {
+  position: fixed;
+  top: 120px;
+  left: 120px;
+  margin: 0;
+  padding: 8px 12px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.85);
+  font: 16px monospace;
+  white-space: pre-wrap;
+  z-index: 99999;
+  pointer-events: none;
+}
