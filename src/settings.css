@@ -1,0 +1,233 @@
+:root {
+  --bg: #14131b;
+  --bg-panel: #1e1c29;
+  --bg-panel-2: #26233440;
+  --ink: #e8e6f0;
+  --ink-dim: #9a95b5;
+  --accent: #7cf29c;
+  --accent-2: #62d0ff;
+  --border: #322f42;
+  --danger: #ff6b8b;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 500px at 50% -10%, #241f38 0%, transparent 60%),
+    var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  padding: 18px 20px 28px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---- header ---- */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#logo-cat {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+}
+h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+.tagline {
+  margin: 2px 0 0;
+  color: var(--ink-dim);
+  font-size: 12px;
+}
+.live-badge {
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid #2f6b47;
+  background: #12291c;
+  padding: 4px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.3px;
+}
+
+/* ---- panels ---- */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--ink-dim);
+  margin: 0 0 14px;
+}
+
+/* ---- pet grid ---- */
+.pet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+}
+.pet-card {
+  background: var(--bg-panel-2);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.08s, background 0.15s;
+}
+.pet-card:hover {
+  transform: translateY(-2px);
+  border-color: #4b4763;
+}
+.pet-card.selected {
+  border-color: var(--accent);
+  background: #182a20;
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.pet-card canvas {
+  width: 56px;
+  height: 56px;
+  image-rendering: pixelated;
+}
+.pet-card .name {
+  font-size: 11px;
+  color: var(--ink-dim);
+  text-transform: capitalize;
+}
+.pet-card.selected .name {
+  color: var(--accent);
+}
+
+/* ---- sliders ---- */
+.control {
+  display: grid;
+  grid-template-columns: 130px 1fr 48px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.control label {
+  color: var(--ink);
+  font-size: 13px;
+}
+.control output {
+  text-align: right;
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: #2c2940;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #0d1a12;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px #7cf29c22;
+}
+
+/* ---- toggles ---- */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+.toggle input {
+  display: none;
+}
+.track {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: #2c2940;
+  border: 1px solid var(--border);
+  position: relative;
+  transition: background 0.15s;
+  flex: none;
+}
+.thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink-dim);
+  transition: transform 0.15s, background 0.15s;
+}
+.toggle input:checked + .track {
+  background: #1c3a28;
+  border-color: #2f6b47;
+}
+.toggle input:checked + .track .thumb {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+.toggle-label {
+  font-size: 13px;
+}
+
+/* ---- actions ---- */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-dim);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.btn-ghost:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}

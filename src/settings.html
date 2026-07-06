@@ -2,9 +2,73 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cursor Pet — Customize</title>
+    <link rel="stylesheet" href="settings.css" />
   </head>
   <body>
-    <p>settings placeholder</p>
+    <header class="app-header">
+      <div class="logo">
+        <canvas id="logo-cat" width="32" height="32"></canvas>
+        <div>
+          <h1>cursor&#8209;pet</h1>
+          <p class="tagline">customize your desktop companion</p>
+        </div>
+      </div>
+      <span class="live-badge">changes apply live</span>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>Pick your pet</h2>
+        <div id="pet-grid" class="pet-grid"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Behaviour</h2>
+
+        <div class="control">
+          <label for="scale">Size</label>
+          <input type="range" id="scale" min="0.5" max="3" step="0.1" />
+          <output id="scale-val"></output>
+        </div>
+
+        <div class="control">
+          <label for="speed">Chase speed</label>
+          <input type="range" id="speed" min="120" max="1200" step="20" />
+          <output id="speed-val"></output>
+        </div>
+
+        <div class="control">
+          <label for="follow_gap">Follow distance</label>
+          <input type="range" id="follow_gap" min="0" max="160" step="2" />
+          <output id="follow_gap-val"></output>
+        </div>
+
+        <div class="control">
+          <label for="idle_before_sleep">Sleep after</label>
+          <input type="range" id="idle_before_sleep" min="2" max="30" step="1" />
+          <output id="idle_before_sleep-val"></output>
+        </div>
+
+        <label class="toggle">
+          <input type="checkbox" id="follow" />
+          <span class="track"><span class="thumb"></span></span>
+          <span class="toggle-label">Follow the cursor</span>
+        </label>
+
+        <label class="toggle">
+          <input type="checkbox" id="sleep_enabled" />
+          <span class="track"><span class="thumb"></span></span>
+          <span class="toggle-label">Fall asleep when idle</span>
+        </label>
+      </section>
+
+      <div class="actions">
+        <button id="reset" class="btn-ghost">Reset to defaults</button>
+      </div>
+    </main>
+
+    <script type="module" src="settings.js"></script>
   </body>
 </html>

@@ -175,7 +175,14 @@ fn open_settings(app: &AppHandle) {
         let _ = win.set_focus();
         return;
     }
-    let _ = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
+    // In test mode the settings page auto-drives a config change so we can
+    // verify live-apply end-to-end without synthetic clicks.
+    let url = if std::env::var_os("CURSORPET_SETTINGS").is_some() {
+        "settings.html?autotest=1"
+    } else {
+        "settings.html"
+    };
+    let _ = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App(url.into()))
         .title("Cursor Pet — Customize")
         .inner_size(760.0, 620.0)
         .min_inner_size(560.0, 480.0)
@@ -306,6 +313,11 @@ pub fn run() {
                 .unwrap_or((1600, 900));
             if let Some(sock) = state.hypr_sock.as_ref() {
                 apply_overlay_rules(sock, sw, sh);
+                // Float + center the settings window (title starts with
+                // "Cursor Pet") so a tiling WM doesn't wedge it into a tile.
+                cursor::dispatch(sock, "keyword windowrule float on, match:title ^(Cursor Pet).*$");
+                cursor::dispatch(sock, "keyword windowrule center on, match:title ^(Cursor Pet).*$");
+                cursor::dispatch(sock, "keyword windowrule no_dim on, match:title ^(Cursor Pet).*$");
             }
 
             // Now build the transparent, click-through overlay covering the
@@ -333,7 +345,12 @@ pub fn run() {
             }
 
             build_tray(&handle)?;
-            spawn_cursor_thread(handle);
+            spawn_cursor_thread(handle.clone());
+
+            // Optional: auto-open settings on launch (handy for testing).
+            if std::env::var_os("CURSORPET_SETTINGS").is_some() {
+                open_settings(&handle);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
