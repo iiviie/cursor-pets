@@ -3,50 +3,39 @@ import { NekoBrain, TILE } from "./neko.js";
 const invoke = window.__TAURI__.core.invoke;
 const listen = window.__TAURI__.event.listen;
 
-// One 32px tile is drawn at TILE * RENDER_BASE * scale pixels.
+// One tile is drawn at TILE * RENDER_BASE * scale CSS pixels.
 const RENDER_BASE = 2;
 
-// A single, static, full-screen canvas. The sprite is drawn at an absolute
-// position and we clear only its previous rect each frame — moving a small
-// transformed canvas instead leaves a trail, because webkit only damages the
-// element's own rect on a transparent surface and never repaints what it
-// vacated.
-const canvas = document.getElementById("pet");
-const ctx = canvas.getContext("2d");
+// The pet is a <div> whose background is the sprite sheet. We move it with a
+// transform and step frames via background-position. A moving div is an
+// ordinary compositing layer the browser repaints correctly — unlike a
+// transparent <canvas> on this overlay, which leaves trails (SHM renderer) or
+// black boxes (DMABUF renderer) at vacated positions.
+const el = document.getElementById("pet");
 
 let cfg = null;
 let brain = null;
-let sprite = new Image();
-let spriteReady = false;
 let currentPet = null;
+let sheetW = 256;
+let sheetH = 128;
+let sheetReady = false;
 let renderSize = TILE * RENDER_BASE;
 
-// Bounds of what we last painted, so we can erase exactly that next frame.
-let lastRect = null;
-// Signature of the last painted frame; lets us skip idle repaints entirely.
 let lastKey = "";
-
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  ctx.imageSmoothingEnabled = false;
-  lastRect = null;
-  lastKey = "";
-}
 
 async function loadSprite(pet) {
   if (pet === currentPet) return;
   currentPet = pet;
-  spriteReady = false;
+  sheetReady = false;
+
   let src;
   try {
     src = await invoke("pet_src", { id: pet });
   } catch {
     src = `sprites/oneko-${pet}.png`;
   }
-  // A newer config may have swapped pets while we awaited; bail if so.
   if (pet !== currentPet) return;
-  // Load the (optional) custom animation manifest for this pet.
+
   let manifest = null;
   try {
     manifest = await invoke("pet_manifest", { id: pet });
@@ -55,12 +44,16 @@ async function loadSprite(pet) {
   }
   if (pet !== currentPet) return;
   if (brain) brain.setAnim(manifest);
+
+  // Load once to learn the sheet's natural size (for background scaling).
   const img = new Image();
   img.onload = () => {
     if (pet !== currentPet) return;
-    sprite = img;
-    spriteReady = true;
-    lastKey = ""; // force a repaint
+    sheetW = img.naturalWidth || 256;
+    sheetH = img.naturalHeight || 128;
+    el.style.backgroundImage = `url("${src}")`;
+    sheetReady = true;
+    lastKey = "";
   };
   img.src = src;
 }
@@ -74,23 +67,25 @@ function applyConfig(next) {
   lastKey = "";
 }
 
-function draw(spriteName) {
+function render(spriteName) {
   const [sx, sy, tile] = brain.currentTile(spriteName);
+  const alpha = cfg.opacity ?? 1;
   const px = Math.round(brain.x - renderSize / 2);
   const py = Math.round(brain.y - renderSize / 2);
-  const alpha = cfg.opacity ?? 1;
-  const key = `${currentPet}:${spriteName}:${brain.frameIndex}:${px}:${py}:${renderSize}:${alpha}`;
-  if (key === lastKey || !spriteReady) return;
+
+  el.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+
+  const key = `${currentPet}:${sx}:${sy}:${renderSize}:${alpha}`;
+  if (key === lastKey || !sheetReady) return;
   lastKey = key;
 
-  // Clear the whole canvas, then paint the new tile. (A dirty-rect clear is
-  // cheaper but webkit's damage handling on a transparent surface leaves
-  // trails, so we clear everything.)
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.globalAlpha = alpha;
-  ctx.drawImage(sprite, sx, sy, tile, tile, px, py, renderSize, renderSize);
-  ctx.globalAlpha = 1;
-  lastRect = { x: px, y: py, w: renderSize, h: renderSize };
+  // Scale factor from source tile pixels to on-screen pixels.
+  const k = renderSize / tile;
+  el.style.width = `${renderSize}px`;
+  el.style.height = `${renderSize}px`;
+  el.style.opacity = alpha;
+  el.style.backgroundSize = `${Math.round(sheetW * k)}px ${Math.round(sheetH * k)}px`;
+  el.style.backgroundPosition = `-${Math.round(sx * k)}px -${Math.round(sy * k)}px`;
 }
 
 let lastT = 0;
@@ -100,7 +95,7 @@ function frame(t) {
   lastT = t;
   if (dt > 0.1) dt = 0.1; // clamp after stalls
 
-  if (brain) draw(brain.update(dt));
+  if (brain) render(brain.update(dt));
   requestAnimationFrame(frame);
 }
 
@@ -111,9 +106,6 @@ let scaleX = 1;
 let scaleY = 1;
 
 async function main() {
-  resizeCanvas();
-  window.addEventListener("resize", resizeCanvas);
-
   const initial = await invoke("get_config");
   applyConfig(initial);
 

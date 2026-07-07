@@ -17,6 +17,12 @@ body {
   position: fixed;
   left: 0;
   top: 0;
+  width: 0;
+  height: 0;
+  /* Rendered as a div with the sprite sheet as a background — a plain moving
+     compositing layer, which the browser repaints cleanly (a transparent
+     <canvas> on this overlay leaves trails or black boxes instead). */
+  background-repeat: no-repeat;
   /* Positioned each frame via transform for cheap, compositor-driven motion. */
   will-change: transform;
   image-rendering: pixelated;
@@ -24,16 +30,3 @@ body {
   pointer-events: none;
 }
 
-#err {
-  position: fixed;
-  top: 120px;
-  left: 120px;
-  margin: 0;
-  padding: 8px 12px;
-  color: #ffffff;
-  background: rgba(0, 0, 0, 0.85);
-  font: 16px monospace;
-  white-space: pre-wrap;
-  z-index: 99999;
-  pointer-events: none;
-}
