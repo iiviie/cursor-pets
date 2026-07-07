@@ -198,8 +198,8 @@ fn open_settings(app: &AppHandle) {
     };
     let _ = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App(url.into()))
         .title("Cursor Pet — Customize")
-        .inner_size(760.0, 620.0)
-        .min_inner_size(560.0, 480.0)
+        .inner_size(840.0, 600.0)
+        .min_inner_size(620.0, 520.0)
         .resizable(true)
         .center()
         .build();

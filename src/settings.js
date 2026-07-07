@@ -1,78 +1,83 @@
 import { SPRITES, TILE } from "./neko.js";
 
 const invoke = window.__TAURI__.core.invoke;
+const RENDER_BASE = 2;
 
 // Must mirror Config::default() in the Rust backend.
 const DEFAULTS = {
   pet: "classic",
-  scale: 1.0,
-  speed: 480.0,
-  follow_gap: 42.0,
+  scale: 0.7,
+  speed: 220.0,
+  follow_gap: 70.0,
+  reaction: 0.16,
+  opacity: 1.0,
   follow: true,
   sleep_enabled: true,
   idle_before_sleep: 6.0,
+  fidget_enabled: true,
 };
 
 const SLIDERS = {
-  scale: (v) => `${v.toFixed(1)}×`,
+  scale: (v) => `${v.toFixed(2)}×`,
+  opacity: (v) => `${Math.round(v * 100)}%`,
   speed: (v) => `${Math.round(v)}`,
   follow_gap: (v) => `${Math.round(v)}px`,
+  reaction: (v) => (v <= 0 ? "off" : `${Math.round(v * 1000)}ms`),
   idle_before_sleep: (v) => `${Math.round(v)}s`,
 };
+const TOGGLES = ["follow", "sleep_enabled", "fidget_enabled"];
 
 let cfg = { ...DEFAULTS };
 const sheets = {}; // pet -> Image
-const previews = []; // { pet, ctx } to animate
 
 function loadSheet(pet) {
   return new Promise((res) => {
     const img = new Image();
     img.onload = () => res(img);
+    img.onerror = () => res(null);
     img.src = `sprites/oneko-${pet}.png`;
   });
 }
 
-function drawTile(ctx, img, spriteName, frame, size) {
+function drawTile(ctx, img, spriteName, frame, dx, dy, size) {
   const frames = SPRITES[spriteName];
   const [bx, by] = frames[frame % frames.length];
-  ctx.clearRect(0, 0, size, size);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, -bx * TILE, -by * TILE, TILE, TILE, 0, 0, size, size);
+  ctx.drawImage(img, -bx * TILE, -by * TILE, TILE, TILE, dx, dy, size, size);
 }
 
 async function apply() {
   await invoke("save_config", { config: cfg });
 }
 
-function buildGrid(pets) {
-  const grid = document.getElementById("pet-grid");
+/* ---------- pet swatches ---------- */
+function buildSwatches(pets) {
+  const grid = document.getElementById("swatches");
   grid.innerHTML = "";
   pets.forEach((pet) => {
-    const card = document.createElement("div");
-    card.className = "pet-card" + (pet === cfg.pet ? " selected" : "");
-    card.dataset.pet = pet;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 32;
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = pet;
-
-    card.append(canvas, name);
-    grid.appendChild(card);
-    previews.push({ pet, ctx: canvas.getContext("2d") });
-
-    card.addEventListener("click", () => {
-      cfg.pet = pet;
-      document
-        .querySelectorAll(".pet-card")
-        .forEach((c) => c.classList.toggle("selected", c.dataset.pet === pet));
-      apply();
-    });
+    const btn = document.createElement("button");
+    btn.className = "swatch" + (pet === cfg.pet ? " selected" : "");
+    btn.dataset.pet = pet;
+    const c = document.createElement("canvas");
+    c.width = 32;
+    c.height = 32;
+    if (sheets[pet]) drawTile(c.getContext("2d"), sheets[pet], "idle", 0, 0, 0, 32);
+    btn.appendChild(c);
+    btn.addEventListener("click", () => selectPet(pet));
+    grid.appendChild(btn);
   });
 }
 
+function selectPet(pet) {
+  cfg.pet = pet;
+  document
+    .querySelectorAll(".swatch")
+    .forEach((s) => s.classList.toggle("selected", s.dataset.pet === pet));
+  document.getElementById("stage-name").textContent = pet;
+  apply();
+}
+
+/* ---------- controls ---------- */
 function bindControls() {
   for (const id of Object.keys(SLIDERS)) {
     const input = document.getElementById(id);
@@ -82,15 +87,15 @@ function bindControls() {
       apply();
     });
   }
-  for (const id of ["follow", "sleep_enabled"]) {
-    const input = document.getElementById(id);
-    input.addEventListener("change", () => {
-      cfg[id] = input.checked;
+  for (const id of TOGGLES) {
+    document.getElementById(id).addEventListener("change", (e) => {
+      cfg[id] = e.target.checked;
       apply();
     });
   }
   document.getElementById("reset").addEventListener("click", () => {
-    cfg = { ...DEFAULTS };
+    const pet = cfg.pet; // keep chosen pet on reset
+    cfg = { ...DEFAULTS, pet };
     syncUI();
     apply();
   });
@@ -102,46 +107,86 @@ function syncUI() {
     input.value = cfg[id];
     document.getElementById(`${id}-val`).textContent = SLIDERS[id](cfg[id]);
   }
-  document.getElementById("follow").checked = cfg.follow;
-  document.getElementById("sleep_enabled").checked = cfg.sleep_enabled;
+  for (const id of TOGGLES) document.getElementById(id).checked = cfg[id] !== false;
+  document.getElementById("stage-name").textContent = cfg.pet;
   document
-    .querySelectorAll(".pet-card")
-    .forEach((c) => c.classList.toggle("selected", c.dataset.pet === cfg.pet));
+    .querySelectorAll(".swatch")
+    .forEach((s) => s.classList.toggle("selected", s.dataset.pet === cfg.pet));
 }
 
-// Animate all previews with a gentle walk-in-place so the sheets feel alive.
+/* ---------- live stage: the selected pet paces at real size & opacity ---- */
+let stageCanvas, stageCtx;
+let px = 40;
+let dir = 1;
 let frame = 0;
-let logoCtx = null;
-function tick() {
-  frame ^= 1;
-  for (const p of previews) {
-    if (sheets[p.pet]) drawTile(p.ctx, sheets[p.pet], "S", frame, 32);
+let frameAcc = 0;
+let lastTs = 0;
+
+function stageStep(ts) {
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000;
+  lastTs = ts;
+  if (dt > 0.1) dt = 0.1;
+
+  const W = stageCanvas.width;
+  const H = stageCanvas.height;
+  const size = Math.round(TILE * RENDER_BASE * cfg.scale);
+  const paceSpeed = 34; // px/s, gentle
+  px += dir * paceSpeed * dt;
+  const left = size * 0.15;
+  const right = W - size * 1.15;
+  if (px < left) {
+    px = left;
+    dir = 1;
+  } else if (px > right) {
+    px = right;
+    dir = -1;
   }
-  if (logoCtx && sheets[cfg.pet]) drawTile(logoCtx, sheets[cfg.pet], "SE", frame, 32);
-  setTimeout(tick, 280);
+  frameAcc += dt;
+  if (frameAcc > 0.16) {
+    frameAcc = 0;
+    frame ^= 1;
+  }
+
+  stageCtx.clearRect(0, 0, W, H);
+  const img = sheets[cfg.pet];
+  if (img) {
+    const y = H - size - Math.round(H * 0.14);
+    stageCtx.globalAlpha = cfg.opacity ?? 1;
+    drawTile(stageCtx, img, dir > 0 ? "E" : "W", frame, Math.round(px), y, size);
+    stageCtx.globalAlpha = 1;
+  }
+  requestAnimationFrame(stageStep);
+}
+
+function initStage() {
+  stageCanvas = document.getElementById("stage");
+  const rect = stageCanvas.getBoundingClientRect();
+  stageCanvas.width = Math.max(200, Math.round(rect.width));
+  stageCanvas.height = Math.max(200, Math.round(rect.height));
+  stageCtx = stageCanvas.getContext("2d");
+  requestAnimationFrame(stageStep);
 }
 
 async function main() {
   try {
     cfg = { ...DEFAULTS, ...(await invoke("get_config")) };
   } catch {
-    /* use defaults */
+    /* defaults */
   }
-  const pets = await invoke("list_pets").catch(() => Object.keys(DEFAULTS).length && ["classic"]);
+  const pets = await invoke("list_pets").catch(() => ["classic"]);
   await Promise.all(pets.map(async (p) => (sheets[p] = await loadSheet(p))));
 
-  buildGrid(pets);
+  buildSwatches(pets);
   bindControls();
   syncUI();
+  initStage();
 
-  logoCtx = document.getElementById("logo-cat").getContext("2d");
-  tick();
-
-  // Test hook: drive a visible config change so live-apply can be verified.
   if (new URLSearchParams(location.search).has("autotest")) {
     setTimeout(async () => {
-      cfg.pet = "vaporwave";
-      cfg.scale = 2.5;
+      selectPet("vaporwave");
+      cfg.scale = 1.6;
+      cfg.opacity = 1;
       syncUI();
       await apply();
     }, 1200);
