@@ -8,6 +8,8 @@
 // the sheet is therefore (-col*32, -row*32).
 export const TILE = 32;
 
+// Default oneko 8x4 layout. A custom pet can override any of these (and the
+// tile size / frame timing) with a manifest — see resolveManifest().
 export const SPRITES = {
   idle: [[-3, -3]],
   alert: [[-7, -3]],
@@ -40,9 +42,24 @@ function directionKey(nx, ny) {
   return key || (Math.abs(nx) > Math.abs(ny) ? (nx >= 0 ? "E" : "W") : (ny >= 0 ? "S" : "N"));
 }
 
+// Merge a custom pet manifest over the defaults. A manifest looks like:
+//   { "tile": 32, "sprites": { "idle": [[-3,-3]], "S": [[..],[..]], ... },
+//     "walkFps": 8, "sleepFps": 2 }
+// Any omitted state falls back to the default oneko frame.
+export function resolveManifest(manifest) {
+  const m = manifest || {};
+  return {
+    tile: typeof m.tile === "number" && m.tile > 0 ? m.tile : TILE,
+    sprites: { ...SPRITES, ...(m.sprites || {}) },
+    walkFps: typeof m.walkFps === "number" && m.walkFps > 0 ? m.walkFps : 7.6,
+    sleepFps: typeof m.sleepFps === "number" && m.sleepFps > 0 ? m.sleepFps : 1.8,
+  };
+}
+
 export class NekoBrain {
   constructor(cfg) {
     this.cfg = cfg;
+    this.anim = resolveManifest(null); // { tile, sprites, walkFps, sleepFps }
     this.x = 0; // pet position
     this.y = 0;
     this.tx = 0; // smoothed target the pet actually chases
@@ -60,6 +77,10 @@ export class NekoBrain {
 
   setConfig(cfg) {
     this.cfg = cfg;
+  }
+
+  setAnim(manifest) {
+    this.anim = resolveManifest(manifest);
   }
 
   place(x, y) {
@@ -117,7 +138,7 @@ export class NekoBrain {
       this.idleTime = 0;
 
       this.frameTimer += dt;
-      if (this.frameTimer > 0.13) {
+      if (this.frameTimer > 1 / this.anim.walkFps) {
         this.frameTimer = 0;
         this.frameIndex ^= 1;
       }
@@ -149,7 +170,7 @@ export class NekoBrain {
         return "tired";
       }
       this.state = "sleep";
-      if (this.frameTimer > 0.55) {
+      if (this.frameTimer > 1 / this.anim.sleepFps) {
         this.frameTimer = 0;
         this.frameIndex ^= 1;
       }
@@ -173,11 +194,13 @@ export class NekoBrain {
     this.frameIndex = 0;
   }
 
-  // Resolve (sprite name) -> the current [srcX, srcY] tile in the sheet.
+  // Resolve (sprite name) -> the current [srcX, srcY, tile] in the sheet.
   currentTile(sprite) {
-    const frames = SPRITES[sprite] || SPRITES.idle;
+    const map = this.anim.sprites;
+    const frames = map[sprite] || map.idle || SPRITES.idle;
     const idx = this.frameIndex % frames.length;
     const [bx, by] = frames[idx];
-    return [-bx * TILE, -by * TILE];
+    const t = this.anim.tile;
+    return [-bx * t, -by * t, t];
   }
 }

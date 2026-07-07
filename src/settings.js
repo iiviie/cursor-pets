@@ -1,7 +1,9 @@
-import { SPRITES, TILE } from "./neko.js";
+import { TILE, resolveManifest } from "./neko.js";
 
 const invoke = window.__TAURI__.core.invoke;
 const RENDER_BASE = 2;
+const DEFAULT_ANIM = resolveManifest(null);
+let stageAnim = DEFAULT_ANIM;
 
 // Must mirror Config::default() in the Rust backend.
 const DEFAULTS = {
@@ -46,11 +48,23 @@ async function loadSheet(id) {
   });
 }
 
-function drawTile(ctx, img, spriteName, frame, dx, dy, size) {
-  const frames = SPRITES[spriteName];
+function drawTile(ctx, img, spriteName, frame, dx, dy, size, anim = DEFAULT_ANIM) {
+  const map = anim.sprites;
+  const frames = map[spriteName] || map.idle;
   const [bx, by] = frames[frame % frames.length];
+  const t = anim.tile;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, -bx * TILE, -by * TILE, TILE, TILE, dx, dy, size, size);
+  ctx.drawImage(img, -bx * t, -by * t, t, t, dx, dy, size, size);
+}
+
+async function loadStageAnim(id) {
+  let m = null;
+  try {
+    m = await invoke("pet_manifest", { id });
+  } catch {
+    /* built-ins use defaults */
+  }
+  stageAnim = resolveManifest(m);
 }
 
 async function apply() {
@@ -102,6 +116,7 @@ function selectPet(pet) {
     .querySelectorAll(".swatch")
     .forEach((s) => s.classList.toggle("selected", s.dataset.pet === pet));
   document.getElementById("stage-name").textContent = pet;
+  loadStageAnim(pet);
   apply();
 }
 
@@ -213,7 +228,7 @@ function stageStep(ts) {
   if (img) {
     const y = H - size - Math.round(H * 0.14);
     stageCtx.globalAlpha = cfg.opacity ?? 1;
-    drawTile(stageCtx, img, dir > 0 ? "E" : "W", frame, Math.round(px), y, size);
+    drawTile(stageCtx, img, dir > 0 ? "E" : "W", frame, Math.round(px), y, size, stageAnim);
     stageCtx.globalAlpha = 1;
   }
   requestAnimationFrame(stageStep);
@@ -240,6 +255,7 @@ async function main() {
   buildSwatches();
   bindControls();
   syncUI();
+  await loadStageAnim(cfg.pet);
   initStage();
 
   if (new URLSearchParams(location.search).has("autotest")) {

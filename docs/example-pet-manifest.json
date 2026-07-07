@@ -1,0 +1,18 @@
+{
+  "$comment": "Optional manifest for a custom pet. Name it <sheet>.json and keep it next to <sheet>.png when importing; cursor-pet copies it alongside the sheet. Every field is optional and falls back to the default oneko layout. Frame coordinates use the oneko convention: [col, row] as NEGATIVE tile offsets, so [-3, -3] is column 3, row 3. States you omit keep their default frames.",
+  "tile": 32,
+  "walkFps": 8,
+  "sleepFps": 2,
+  "sprites": {
+    "idle": [[-3, -3]],
+    "sleeping": [[-2, 0], [-2, -1]],
+    "N": [[-1, -2], [-1, -3]],
+    "NE": [[0, -2], [0, -3]],
+    "E": [[-3, 0], [-3, -1]],
+    "SE": [[-5, -1], [-5, -2]],
+    "S": [[-6, -3], [-7, -2]],
+    "SW": [[-5, -3], [-6, -1]],
+    "W": [[-4, -2], [-4, -3]],
+    "NW": [[-1, 0], [-1, -1]]
+  }
+}

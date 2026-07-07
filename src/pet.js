@@ -46,6 +46,15 @@ async function loadSprite(pet) {
   }
   // A newer config may have swapped pets while we awaited; bail if so.
   if (pet !== currentPet) return;
+  // Load the (optional) custom animation manifest for this pet.
+  let manifest = null;
+  try {
+    manifest = await invoke("pet_manifest", { id: pet });
+  } catch {
+    /* built-ins have no manifest */
+  }
+  if (pet !== currentPet) return;
+  if (brain) brain.setAnim(manifest);
   const img = new Image();
   img.onload = () => {
     if (pet !== currentPet) return;
@@ -66,7 +75,7 @@ function applyConfig(next) {
 }
 
 function draw(spriteName) {
-  const [sx, sy] = brain.currentTile(spriteName);
+  const [sx, sy, tile] = brain.currentTile(spriteName);
   const px = Math.round(brain.x - renderSize / 2);
   const py = Math.round(brain.y - renderSize / 2);
   const alpha = cfg.opacity ?? 1;
@@ -79,7 +88,7 @@ function draw(spriteName) {
   // trails, so we clear everything.)
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.globalAlpha = alpha;
-  ctx.drawImage(sprite, sx, sy, TILE, TILE, px, py, renderSize, renderSize);
+  ctx.drawImage(sprite, sx, sy, tile, tile, px, py, renderSize, renderSize);
   ctx.globalAlpha = 1;
   lastRect = { x: px, y: py, w: renderSize, h: renderSize };
 }

@@ -165,6 +165,21 @@ fn pet_src(state: State<Arc<AppState>>, id: String) -> Result<String, String> {
     Ok(format!("data:image/png;base64,{b64}"))
 }
 
+/// Return the animation manifest for a custom pet (state->frames overrides),
+/// or null if it has none / is a built-in.
+#[tauri::command]
+fn pet_manifest(state: State<Arc<AppState>>, id: String) -> Option<serde_json::Value> {
+    if PETS.contains(&id.as_str()) {
+        return None;
+    }
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return None;
+    }
+    let path = state.pets_dir.join(format!("{id}.json"));
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
 /// Open a file picker, validate the chosen PNG is an oneko-style sprite sheet,
 /// copy it into the pets dir, and return its new entry.
 #[tauri::command]
@@ -196,6 +211,13 @@ async fn import_pet(app: AppHandle) -> Result<Option<PetInfo>, String> {
     let id = unique_pet_id(&state.pets_dir, &src);
     let dest = state.pets_dir.join(format!("{id}.png"));
     std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    // If a sibling manifest (<sheet>.json) sits next to the sheet, bring it
+    // along so the pet keeps its custom state/frame mapping.
+    if let Ok(manifest) = std::fs::read(src.with_extension("json")) {
+        if serde_json::from_slice::<serde_json::Value>(&manifest).is_ok() {
+            let _ = std::fs::write(state.pets_dir.join(format!("{id}.json")), &manifest);
+        }
+    }
     Ok(Some(PetInfo { id, builtin: false }))
 }
 
@@ -206,6 +228,7 @@ fn delete_pet(app: AppHandle, state: State<Arc<AppState>>, id: String) -> Result
     }
     let path = custom_pet_path(&state.pets_dir, &id).ok_or("invalid pet id")?;
     std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(state.pets_dir.join(format!("{id}.json")));
     // If the deleted pet was selected, fall back to the default and notify.
     let mut fell_back = None;
     {
@@ -451,6 +474,7 @@ pub fn run() {
             get_config,
             list_pets,
             pet_src,
+            pet_manifest,
             import_pet,
             delete_pet,
             get_cursor,
