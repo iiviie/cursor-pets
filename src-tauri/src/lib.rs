@@ -317,6 +317,26 @@ fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     Some((w, h))
 }
 
+/// Whether the app is registered to launch on login (OS-level, cross-platform).
+#[tauri::command]
+fn get_autostart(app: AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+/// Enable/disable launch-on-login. On Linux this writes an autostart .desktop,
+/// on Windows a Run registry key, on macOS a Launch Agent.
+#[tauri::command]
+fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let mgr = app.autolaunch();
+    if enabled {
+        mgr.enable().map_err(|e| e.to_string())
+    } else {
+        mgr.disable().map_err(|e| e.to_string())
+    }
+}
+
 #[tauri::command]
 fn get_cursor(state: State<Arc<AppState>>) -> Option<(i32, i32)> {
     state.cursor.cursor()
@@ -546,6 +566,10 @@ pub fn run() {
             open_settings(app);
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             get_config,
             list_pets,
@@ -555,6 +579,8 @@ pub fn run() {
             delete_pet,
             get_cursor,
             get_screen,
+            get_autostart,
+            set_autostart,
             save_config
         ])
         .setup(|app| {

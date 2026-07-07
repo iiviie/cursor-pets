@@ -206,6 +206,17 @@ function bindControls() {
     syncUI();
     apply();
   });
+
+  // Launch-on-login is OS-level state, not part of the pet config.
+  const auto = document.getElementById("autostart");
+  auto.addEventListener("change", async () => {
+    try {
+      await invoke("set_autostart", { enabled: auto.checked });
+    } catch (err) {
+      auto.checked = !auto.checked; // revert on failure
+      showStatus(String(err));
+    }
+  });
 }
 
 function syncUI() {
@@ -292,6 +303,10 @@ async function main() {
   buildSwatches();
   bindControls();
   syncUI();
+  // Reflect the current OS launch-on-login state.
+  invoke("get_autostart")
+    .then((on) => (document.getElementById("autostart").checked = !!on))
+    .catch(() => {});
   await loadStageAnim(cfg.pet);
   initStage();
 

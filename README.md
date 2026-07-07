@@ -28,6 +28,9 @@ background.
   distance, follow smoothness, and sleep timing, toggle following/sleeping/fidgets.
   **Every change applies instantly** to the running pet and is saved to disk.
 - **System tray** — Customize…, Show / Hide Pet, and Quit.
+- **Start on login** — a toggle in the settings window registers the app to
+  launch at login (cross-platform: an autostart `.desktop` on Linux, a `Run`
+  registry key on Windows, a Launch Agent on macOS).
 
 ## Screenshots
 
