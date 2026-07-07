@@ -34,17 +34,26 @@ function resizeCanvas() {
   lastKey = "";
 }
 
-function loadSprite(pet) {
+async function loadSprite(pet) {
   if (pet === currentPet) return;
   currentPet = pet;
   spriteReady = false;
+  let src;
+  try {
+    src = await invoke("pet_src", { id: pet });
+  } catch {
+    src = `sprites/oneko-${pet}.png`;
+  }
+  // A newer config may have swapped pets while we awaited; bail if so.
+  if (pet !== currentPet) return;
   const img = new Image();
   img.onload = () => {
+    if (pet !== currentPet) return;
     sprite = img;
     spriteReady = true;
     lastKey = ""; // force a repaint
   };
-  img.src = `sprites/oneko-${pet}.png`;
+  img.src = src;
 }
 
 function applyConfig(next) {

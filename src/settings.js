@@ -28,14 +28,21 @@ const SLIDERS = {
 const TOGGLES = ["follow", "sleep_enabled", "fidget_enabled"];
 
 let cfg = { ...DEFAULTS };
-const sheets = {}; // pet -> Image
+let petInfos = []; // [{ id, builtin }]
+const sheets = {}; // id -> Image
 
-function loadSheet(pet) {
+async function loadSheet(id) {
+  let src;
+  try {
+    src = await invoke("pet_src", { id });
+  } catch {
+    src = `sprites/oneko-${id}.png`;
+  }
   return new Promise((res) => {
     const img = new Image();
     img.onload = () => res(img);
     img.onerror = () => res(null);
-    img.src = `sprites/oneko-${pet}.png`;
+    img.src = src;
   });
 }
 
@@ -51,21 +58,42 @@ async function apply() {
 }
 
 /* ---------- pet swatches ---------- */
-function buildSwatches(pets) {
+function buildSwatches() {
   const grid = document.getElementById("swatches");
   grid.innerHTML = "";
-  pets.forEach((pet) => {
+  petInfos.forEach((info) => {
     const btn = document.createElement("button");
-    btn.className = "swatch" + (pet === cfg.pet ? " selected" : "");
-    btn.dataset.pet = pet;
+    btn.className = "swatch" + (info.id === cfg.pet ? " selected" : "");
+    btn.dataset.pet = info.id;
+    btn.title = info.id;
     const c = document.createElement("canvas");
     c.width = 32;
     c.height = 32;
-    if (sheets[pet]) drawTile(c.getContext("2d"), sheets[pet], "idle", 0, 0, 0, 32);
+    if (sheets[info.id]) drawTile(c.getContext("2d"), sheets[info.id], "idle", 0, 0, 0, 32);
     btn.appendChild(c);
-    btn.addEventListener("click", () => selectPet(pet));
+    btn.addEventListener("click", () => selectPet(info.id));
+
+    if (!info.builtin) {
+      const del = document.createElement("span");
+      del.className = "del";
+      del.textContent = "×";
+      del.title = "Remove pet";
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deletePet(info.id);
+      });
+      btn.appendChild(del);
+    }
     grid.appendChild(btn);
   });
+
+  // "Add your own" tile.
+  const add = document.createElement("button");
+  add.className = "swatch add";
+  add.textContent = "+";
+  add.title = "Import a sprite sheet (8×4 grid of 32px tiles)";
+  add.addEventListener("click", importPet);
+  grid.appendChild(add);
 }
 
 function selectPet(pet) {
@@ -75,6 +103,38 @@ function selectPet(pet) {
     .forEach((s) => s.classList.toggle("selected", s.dataset.pet === pet));
   document.getElementById("stage-name").textContent = pet;
   apply();
+}
+
+async function importPet() {
+  let info;
+  try {
+    info = await invoke("import_pet");
+  } catch (err) {
+    alert(String(err));
+    return;
+  }
+  if (!info) return; // cancelled
+  petInfos.push(info);
+  sheets[info.id] = await loadSheet(info.id);
+  buildSwatches();
+  selectPet(info.id);
+}
+
+async function deletePet(id) {
+  try {
+    await invoke("delete_pet", { id });
+  } catch (err) {
+    alert(String(err));
+    return;
+  }
+  petInfos = petInfos.filter((p) => p.id !== id);
+  delete sheets[id];
+  if (cfg.pet === id) {
+    cfg.pet = "classic";
+    document.getElementById("stage-name").textContent = cfg.pet;
+    // backend already persisted + broadcast the fallback; keep local in sync
+  }
+  buildSwatches();
 }
 
 /* ---------- controls ---------- */
@@ -174,18 +234,19 @@ async function main() {
   } catch {
     /* defaults */
   }
-  const pets = await invoke("list_pets").catch(() => ["classic"]);
-  await Promise.all(pets.map(async (p) => (sheets[p] = await loadSheet(p))));
+  petInfos = await invoke("list_pets").catch(() => [{ id: "classic", builtin: true }]);
+  await Promise.all(petInfos.map(async (p) => (sheets[p.id] = await loadSheet(p.id))));
 
-  buildSwatches(pets);
+  buildSwatches();
   bindControls();
   syncUI();
   initStage();
 
   if (new URLSearchParams(location.search).has("autotest")) {
     setTimeout(async () => {
-      selectPet("vaporwave");
-      cfg.scale = 1.6;
+      const last = petInfos[petInfos.length - 1];
+      selectPet(last ? last.id : "vaporwave");
+      cfg.scale = 1.5;
       cfg.opacity = 1;
       syncUI();
       await apply();

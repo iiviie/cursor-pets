@@ -68,16 +68,28 @@ impl Default for Config {
     }
 }
 
+/// Metadata for a pet the frontend can choose.
+#[derive(Serialize, Clone, Debug)]
+pub struct PetInfo {
+    /// Stable id used everywhere (built-in name, or custom file stem).
+    pub id: String,
+    /// True for the bundled pets, false for user-imported ones.
+    pub builtin: bool,
+}
+
 /// Shared application state.
 pub struct AppState {
     pub config: Mutex<Config>,
     pub config_path: PathBuf,
+    pub pets_dir: PathBuf,
     pub hypr_sock: Option<PathBuf>,
     pub paused: AtomicBool,
 }
 
 impl AppState {
-    fn load(config_path: PathBuf) -> Self {
+    fn load(config_dir: PathBuf) -> Self {
+        let config_path = config_dir.join("config.json");
+        let pets_dir = config_dir.join("pets");
         let config = std::fs::read_to_string(&config_path)
             .ok()
             .and_then(|s| serde_json::from_str::<Config>(&s).ok())
@@ -85,6 +97,7 @@ impl AppState {
         Self {
             config: Mutex::new(config),
             config_path,
+            pets_dir,
             hypr_sock: cursor::socket_path(),
             paused: AtomicBool::new(false),
         }
@@ -112,8 +125,143 @@ fn get_config(state: State<Arc<AppState>>) -> Config {
 }
 
 #[tauri::command]
-fn list_pets() -> Vec<String> {
-    PETS.iter().map(|s| s.to_string()).collect()
+fn list_pets(state: State<Arc<AppState>>) -> Vec<PetInfo> {
+    let mut pets: Vec<PetInfo> = PETS
+        .iter()
+        .map(|s| PetInfo {
+            id: s.to_string(),
+            builtin: true,
+        })
+        .collect();
+    if let Ok(entries) = std::fs::read_dir(&state.pets_dir) {
+        let mut custom: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) == Some("png") {
+                    p.file_stem().and_then(|s| s.to_str()).map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        custom.sort();
+        pets.extend(custom.into_iter().map(|id| PetInfo { id, builtin: false }));
+    }
+    pets
+}
+
+/// Return an `<img>`-loadable source for a pet: the bundled asset path for
+/// built-ins, or a base64 data URL for a custom (out-of-bundle) sheet.
+#[tauri::command]
+fn pet_src(state: State<Arc<AppState>>, id: String) -> Result<String, String> {
+    if PETS.contains(&id.as_str()) {
+        return Ok(format!("sprites/oneko-{id}.png"));
+    }
+    let path = custom_pet_path(&state.pets_dir, &id).ok_or("invalid pet id")?;
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:image/png;base64,{b64}"))
+}
+
+/// Open a file picker, validate the chosen PNG is an oneko-style sprite sheet,
+/// copy it into the pets dir, and return its new entry.
+#[tauri::command]
+async fn import_pet(app: AppHandle) -> Result<Option<PetInfo>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("Sprite sheet (PNG)", &["png"])
+        .blocking_pick_file();
+    let Some(picked) = picked else {
+        return Ok(None); // user cancelled
+    };
+    let src = picked.into_path().map_err(|e| e.to_string())?;
+
+    let bytes = std::fs::read(&src).map_err(|e| e.to_string())?;
+    let (w, h) = png_dimensions(&bytes)
+        .ok_or("That file isn't a valid PNG.")?;
+    // Sheets are an 8x4 grid of 32px tiles, so both dims must be multiples of
+    // 32 and at least 256x128.
+    if w % 32 != 0 || h % 32 != 0 || w < 256 || h < 128 {
+        return Err(format!(
+            "Sprite sheet must be an 8x4 grid of 32px tiles (≥256x128, sizes multiple of 32). Got {w}x{h}."
+        ));
+    }
+
+    let state = app.state::<Arc<AppState>>();
+    std::fs::create_dir_all(&state.pets_dir).map_err(|e| e.to_string())?;
+    let id = unique_pet_id(&state.pets_dir, &src);
+    let dest = state.pets_dir.join(format!("{id}.png"));
+    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    Ok(Some(PetInfo { id, builtin: false }))
+}
+
+#[tauri::command]
+fn delete_pet(app: AppHandle, state: State<Arc<AppState>>, id: String) -> Result<(), String> {
+    if PETS.contains(&id.as_str()) {
+        return Err("Built-in pets can't be deleted.".into());
+    }
+    let path = custom_pet_path(&state.pets_dir, &id).ok_or("invalid pet id")?;
+    std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    // If the deleted pet was selected, fall back to the default and notify.
+    let mut fell_back = None;
+    {
+        let mut cfg = state.config.lock().unwrap();
+        if cfg.pet == id {
+            cfg.pet = "classic".into();
+            fell_back = Some(cfg.clone());
+        }
+    }
+    if let Some(cfg) = fell_back {
+        state.persist();
+        let _ = app.emit("config-changed", &cfg);
+    }
+    Ok(())
+}
+
+/// Resolve a custom pet id to its file, rejecting path-traversal ids.
+fn custom_pet_path(pets_dir: &PathBuf, id: &str) -> Option<PathBuf> {
+    if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") {
+        return None;
+    }
+    Some(pets_dir.join(format!("{id}.png")))
+}
+
+/// Sanitize the source file name into a unique, filesystem-safe pet id.
+fn unique_pet_id(pets_dir: &PathBuf, src: &PathBuf) -> String {
+    let stem = src
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("pet")
+        .to_lowercase();
+    let base: String = stem
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let base = base.trim_matches('-');
+    let base = if base.is_empty() { "pet" } else { base };
+    // Avoid colliding with built-ins or existing files.
+    let mut id = base.to_string();
+    let mut n = 2;
+    while PETS.contains(&id.as_str()) || pets_dir.join(format!("{id}.png")).exists() {
+        id = format!("{base}-{n}");
+        n += 1;
+    }
+    id
+}
+
+/// Parse width/height from a PNG's IHDR without pulling in an image decoder.
+fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    const SIG: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    if bytes.len() < 24 || bytes[..8] != SIG {
+        return None;
+    }
+    let w = u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+    let h = u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]);
+    Some((w, h))
 }
 
 #[tauri::command]
@@ -191,7 +339,7 @@ fn open_settings(app: &AppHandle) {
     }
     // In test mode the settings page auto-drives a config change so we can
     // verify live-apply end-to-end without synthetic clicks.
-    let url = if std::env::var_os("CURSORPET_SETTINGS").is_some() {
+    let url = if std::env::var_os("CURSORPET_AUTOTEST").is_some() {
         "settings.html?autotest=1"
     } else {
         "settings.html"
@@ -298,9 +446,13 @@ pub fn run() {
     // cleanly.
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_config,
             list_pets,
+            pet_src,
+            import_pet,
+            delete_pet,
             get_cursor,
             get_screen,
             save_config
@@ -313,7 +465,7 @@ pub fn run() {
                 .path()
                 .app_config_dir()
                 .unwrap_or_else(|_| PathBuf::from("."));
-            let state = Arc::new(AppState::load(config_dir.join("config.json")));
+            let state = Arc::new(AppState::load(config_dir));
             app.manage(state.clone());
 
             // Figure out the logical screen size and register the overlay
