@@ -82,7 +82,7 @@ pub struct AppState {
     pub config: Mutex<Config>,
     pub config_path: PathBuf,
     pub pets_dir: PathBuf,
-    pub hypr_sock: Option<PathBuf>,
+    pub cursor: cursor::CursorSource,
     pub paused: AtomicBool,
 }
 
@@ -98,7 +98,7 @@ impl AppState {
             config: Mutex::new(config),
             config_path,
             pets_dir,
-            hypr_sock: cursor::socket_path(),
+            cursor: cursor::CursorSource::detect(),
             paused: AtomicBool::new(false),
         }
     }
@@ -289,20 +289,51 @@ fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 
 #[tauri::command]
 fn get_cursor(state: State<Arc<AppState>>) -> Option<(i32, i32)> {
-    state
-        .hypr_sock
-        .as_ref()
-        .and_then(|s| cursor::cursor_pos(s))
+    state.cursor.cursor()
 }
 
-/// Logical screen size (matches the coordinate space of `get_cursor`).
+/// Extent of the coordinate space `get_cursor` reports in, so the overlay can
+/// map cursor positions into its own CSS pixels. On Hyprland that's the logical
+/// monitor size; on other platforms it's the native (physical) monitor size,
+/// matching what device_query returns.
 #[tauri::command]
-fn get_screen(state: State<Arc<AppState>>) -> (i32, i32) {
-    state
-        .hypr_sock
-        .as_ref()
-        .map(|s| cursor::primary_monitor_size(s))
-        .unwrap_or((1600, 900))
+fn get_screen(app: AppHandle, state: State<Arc<AppState>>) -> (i32, i32) {
+    match state.cursor.hypr_sock() {
+        Some(sock) => cursor::hypr_monitor_size(sock),
+        None => native_physical_size(&app),
+    }
+}
+
+/// Physical size of the primary monitor via Tauri (used off Hyprland).
+fn native_physical_size(app: &AppHandle) -> (i32, i32) {
+    app.primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| {
+            let s = m.size();
+            (s.width as i32, s.height as i32)
+        })
+        .unwrap_or((1920, 1080))
+}
+
+/// Logical size to give the overlay window so it covers the primary monitor.
+fn overlay_logical_size(app: &AppHandle, state: &AppState) -> (i32, i32) {
+    match state.cursor.hypr_sock() {
+        Some(sock) => cursor::hypr_monitor_size(sock),
+        None => app
+            .primary_monitor()
+            .ok()
+            .flatten()
+            .map(|m| {
+                let s = m.size();
+                let sf = m.scale_factor().max(0.1);
+                (
+                    ((s.width as f64) / sf).round() as i32,
+                    ((s.height as f64) / sf).round() as i32,
+                )
+            })
+            .unwrap_or((1600, 900)),
+    }
 }
 
 #[tauri::command]
@@ -427,14 +458,22 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 fn spawn_cursor_thread(app: AppHandle) {
     let state = app.state::<Arc<AppState>>().inner().clone();
     thread::spawn(move || {
-        let Some(sock) = state.hypr_sock.clone() else {
-            eprintln!("[cursor-pet] Hyprland socket not found; cursor tracking disabled");
-            return;
-        };
         let mut last = (i32::MIN, i32::MIN);
+        // Persistent device_query handle for the Native path (avoids
+        // reconnecting to the OS/X each poll). Not used on Hyprland.
+        let native = device_query::DeviceState::new();
         loop {
             if !state.paused.load(Ordering::Relaxed) {
-                if let Some(pos) = cursor::cursor_pos(&sock) {
+                let pos = match &state.cursor {
+                    #[cfg(unix)]
+                    cursor::CursorSource::Hyprland(sock) => cursor::hypr_cursor_pos(sock),
+                    cursor::CursorSource::Native => {
+                        use device_query::DeviceQuery;
+                        let m = native.get_mouse();
+                        Some((m.coords.0, m.coords.1))
+                    }
+                };
+                if let Some(pos) = pos {
                     if pos != last {
                         last = pos;
                         let _ = app.emit_to("pet", "cursor", pos);
@@ -460,13 +499,14 @@ pub fn run() {
     // same logical coordinate space the compositor uses for the cursor, so the
     // overlay maps 1:1 to `cursorpos`. (XWayland instead double-scales the
     // surface, which broke the overlay geometry.)
-    if std::env::var_os("GDK_BACKEND").is_none() {
-        std::env::set_var("GDK_BACKEND", "wayland");
-    }
     // NOTE: we intentionally do NOT set WEBKIT_DISABLE_DMABUF_RENDERER — with
     // the SHM fallback renderer, moving sprite frames leave trails on the
     // transparent surface (damage tracking breaks). The DMABUF renderer paints
     // cleanly.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("GDK_BACKEND").is_none() {
+        std::env::set_var("GDK_BACKEND", "wayland");
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -492,16 +532,13 @@ pub fn run() {
             let state = Arc::new(AppState::load(config_dir));
             app.manage(state.clone());
 
-            // Figure out the logical screen size and register the overlay
-            // window rules *before* the window is created, so Hyprland floats +
-            // pins + un-blurs it the moment it maps (rules only affect windows
-            // that open after they're set).
-            let (sw, sh) = state
-                .hypr_sock
-                .as_ref()
-                .map(|s| cursor::primary_monitor_size(s))
-                .unwrap_or((1600, 900));
-            if let Some(sock) = state.hypr_sock.as_ref() {
+            // Figure out the logical screen size and (on Hyprland) register the
+            // overlay window rules *before* the window is created, so the
+            // compositor floats + pins + un-blurs it the moment it maps (rules
+            // only affect windows that open after they're set). On other
+            // platforms the native Tauri window flags below are enough.
+            let (sw, sh) = overlay_logical_size(&handle, &state);
+            if let Some(sock) = state.cursor.hypr_sock() {
                 apply_overlay_rules(sock, sw, sh);
                 // Float + center the settings window (title starts with
                 // "Cursor Pet") so a tiling WM doesn't wedge it into a tile.
@@ -527,7 +564,7 @@ pub fn run() {
             // Click-through: the overlay must never intercept input.
             let _ = pet.set_ignore_cursor_events(true);
             // Belt-and-suspenders: nudge size/pos via the compositor too.
-            if let Some(sock) = state.hypr_sock.as_ref() {
+            if let Some(sock) = state.cursor.hypr_sock() {
                 let t = format!("title:^({OVERLAY_TITLE})$");
                 cursor::dispatch(sock, &format!("dispatch setfloating {t}"));
                 cursor::dispatch(sock, &format!("dispatch resizewindowpixel exact {sw} {sh},{t}"));

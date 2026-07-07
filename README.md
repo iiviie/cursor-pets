@@ -119,21 +119,33 @@ The config is stored at `~/.config/dev.crosmos.cursorpet/config.json`:
 | `sleep_enabled` | whether the pet sleeps when idle |
 | `idle_before_sleep` | seconds of idle before sleeping |
 
-## Portability
+## Platform support
 
-The overlay is compositor-aware in a few Hyprland-specific spots that are easy to
-generalize:
+cursor-pet is written to run on Linux, Windows, and macOS. The platform-specific
+bits (global cursor + overlay placement) live behind a small abstraction
+(`src-tauri/src/cursor.rs` → `CursorSource`), so the rest of the app is shared.
 
-- **Global cursor** — read via Hyprland's IPC (`cursorpos`). On other setups this
-  can be swapped for an X11 `XQueryPointer` / wlr virtual-pointer path.
-- **Window behavior** — floating, pinned, no-blur/dim, and never-focus are applied
-  via Hyprland window rules. On other WMs these map to equivalent rules or to
-  layer-shell.
-- Runs on the **native Wayland** GTK backend. Under fractional scaling the overlay
-  uses the compositor's logical coordinate space so it maps 1:1 to the cursor.
+| Platform | Status | Global cursor | Overlay |
+| --- | --- | --- | --- |
+| **Linux / Hyprland** | ✅ tested | Hyprland IPC (`cursorpos`, logical coords) | Hyprland window rules (float/pin/no-blur/no-focus) + native Wayland |
+| **Windows** | ⚠️ implemented, needs testing | `device_query` (`GetCursorPos`) | native always-on-top transparent click-through window sized to the monitor |
+| **macOS** | ⚠️ implemented, needs testing | `device_query` (Core Graphics) | same, with `macOSPrivateApi` for the transparent window |
+| **Linux / other WMs** | partial | `device_query` (needs X11 / XWayland) | native flags; window rules are Hyprland-only |
 
-Multi-monitor and non-1.0 fractional scaling beyond the primary output are known
-follow-ups.
+Per-OS requirements:
+
+- **Windows** — no extra setup; ships as a normal `.exe`. Build needs the MSVC
+  or GNU toolchain.
+- **macOS** — the app needs **Accessibility** permission (System Settings →
+  Privacy & Security → Accessibility) for `device_query` to read the global
+  cursor. Transparent windows require `macOSPrivateApi` (already enabled), which
+  means it can't ship on the Mac App Store — fine for a personal/desktop tool.
+- **Linux (non-Hyprland)** — `device_query` reads the pointer via X11, so it
+  works on X11 sessions and under XWayland. A pure-Wayland session without
+  XWayland has no portable global-cursor API and isn't supported.
+
+Multi-monitor and fractional scaling beyond the primary output are known
+follow-ups on every platform.
 
 ## Credits
 
