@@ -17,11 +17,20 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.png"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/iiviie/cursor-pets/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk4MDUwQjEzQTE1MUQ5MTIKUldRUzJWR2hFd3NGbUkwU1BkK3U5SnlsQlJMTlgxMVlrc1FXL0t5bG05UHNBZ2RWWldvMlJ5OEkK"
+    }
   }
 }

@@ -471,12 +471,90 @@ fn toggle_pause(app: &AppHandle) {
     }
 }
 
+/// Check GitHub Releases for a newer version and install it.
+/// - `interactive` (tray "Check for updates…"): report the outcome via a dialog
+///   and offer to restart. Otherwise (startup) run silently; the update applies
+///   on the next launch.
+#[cfg(desktop)]
+async fn perform_update(app: AppHandle, interactive: bool) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    use tauri_plugin_updater::UpdaterExt;
+
+    let notify = |msg: String, kind: MessageDialogKind| {
+        app.dialog()
+            .message(msg)
+            .title("cursor-pet")
+            .kind(kind)
+            .show(|_| {});
+    };
+
+    let updater = match app.updater() {
+        Ok(u) => u,
+        Err(e) => {
+            if interactive {
+                notify(format!("Updater unavailable: {e}"), MessageDialogKind::Error);
+            }
+            return;
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            let version = update.version.clone();
+            match update.download_and_install(|_, _| {}, || {}).await {
+                Ok(_) => {
+                    if interactive {
+                        let app2 = app.clone();
+                        app.dialog()
+                            .message(format!(
+                                "Updated to v{version}. Restart cursor-pet now to apply?"
+                            ))
+                            .title("cursor-pet")
+                            .buttons(MessageDialogButtons::OkCancelCustom(
+                                "Restart".into(),
+                                "Later".into(),
+                            ))
+                            .show(move |restart| {
+                                if restart {
+                                    app2.restart();
+                                }
+                            });
+                    }
+                    // Silent path: installed; takes effect on next launch.
+                }
+                Err(e) => {
+                    if interactive {
+                        notify(format!("Update failed: {e}"), MessageDialogKind::Error);
+                    }
+                }
+            }
+        }
+        Ok(None) => {
+            if interactive {
+                notify(
+                    "You're on the latest version.".into(),
+                    MessageDialogKind::Info,
+                );
+            }
+        }
+        Err(e) => {
+            if interactive {
+                notify(
+                    format!("Couldn't check for updates: {e}"),
+                    MessageDialogKind::Warning,
+                );
+            }
+        }
+    }
+}
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let customize = MenuItem::with_id(app, "customize", "Customize…", true, None::<&str>)?;
     let toggle = MenuItem::with_id(app, "toggle", "Show / Hide Pet", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", "Check for updates…", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&customize, &toggle, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&customize, &toggle, &update, &sep, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
         .icon(app.default_window_icon().unwrap().clone())
@@ -486,6 +564,13 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "customize" => open_settings(app),
             "toggle" => toggle_pause(app),
+            "update" => {
+                #[cfg(desktop)]
+                {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(perform_update(app, true));
+                }
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -559,7 +644,7 @@ pub fn run() {
         std::env::set_var("GDK_BACKEND", "wayland");
     }
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         // Only one pet, please: a second launch just opens the settings window
         // of the already-running instance instead of spawning another overlay.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -569,7 +654,14 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
-        ))
+        ));
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![
             get_config,
             list_pets,
@@ -639,6 +731,13 @@ pub fn run() {
             // Optional: auto-open settings on launch (handy for testing).
             if std::env::var_os("CURSORPET_SETTINGS").is_some() {
                 open_settings(&handle);
+            }
+
+            // Quietly check for updates on launch; if one is found it installs
+            // in the background and applies on the next start (no interruption).
+            #[cfg(desktop)]
+            if std::env::var_os("CURSORPET_NO_UPDATE_CHECK").is_none() {
+                tauri::async_runtime::spawn(perform_update(handle.clone(), false));
             }
             Ok(())
         })
