@@ -68,6 +68,31 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    /// Clamp values into sane ranges so a hand-edited or corrupt config.json
+    /// can't make the pet teleport, vanish, or spin. Non-finite numbers
+    /// (NaN/Infinity) fall back to the default.
+    fn normalize(&mut self) {
+        let d = Config::default();
+        let fix = |v: f64, def: f64, lo: f64, hi: f64| {
+            if v.is_finite() {
+                v.clamp(lo, hi)
+            } else {
+                def
+            }
+        };
+        self.scale = fix(self.scale, d.scale, 0.2, 4.0);
+        self.opacity = fix(self.opacity, d.opacity, 0.05, 1.0);
+        self.speed = fix(self.speed, d.speed, 20.0, 2000.0);
+        self.follow_gap = fix(self.follow_gap, d.follow_gap, 0.0, 600.0);
+        self.reaction = fix(self.reaction, d.reaction, 0.0, 2.0);
+        self.idle_before_sleep = fix(self.idle_before_sleep, d.idle_before_sleep, 0.5, 600.0);
+        if self.pet.trim().is_empty() {
+            self.pet = d.pet;
+        }
+    }
+}
+
 /// Metadata for a pet the frontend can choose.
 #[derive(Serialize, Clone, Debug)]
 pub struct PetInfo {
@@ -90,10 +115,11 @@ impl AppState {
     fn load(config_dir: PathBuf) -> Self {
         let config_path = config_dir.join("config.json");
         let pets_dir = config_dir.join("pets");
-        let config = std::fs::read_to_string(&config_path)
+        let mut config = std::fs::read_to_string(&config_path)
             .ok()
             .and_then(|s| serde_json::from_str::<Config>(&s).ok())
             .unwrap_or_default();
+        config.normalize();
         Self {
             config: Mutex::new(config),
             config_path,
@@ -204,6 +230,10 @@ async fn import_pet(app: AppHandle) -> Result<Option<PetInfo>, String> {
         return Err(format!(
             "Sprite sheet must be an 8x4 grid of 32px tiles (≥256x128, sizes multiple of 32). Got {w}x{h}."
         ));
+    }
+    // Guard against absurd sheets (they'd become huge base64 data URLs).
+    if w > 4096 || h > 4096 {
+        return Err(format!("Sprite sheet is too large ({w}x{h}); max 4096x4096."));
     }
 
     let state = app.state::<Arc<AppState>>();
@@ -337,7 +367,8 @@ fn overlay_logical_size(app: &AppHandle, state: &AppState) -> (i32, i32) {
 }
 
 #[tauri::command]
-fn save_config(app: AppHandle, state: State<Arc<AppState>>, config: Config) {
+fn save_config(app: AppHandle, state: State<Arc<AppState>>, mut config: Config) {
+    config.normalize();
     {
         let mut guard = state.config.lock().unwrap();
         *guard = config.clone();
@@ -509,6 +540,11 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        // Only one pet, please: a second launch just opens the settings window
+        // of the already-running instance instead of spawning another overlay.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            open_settings(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_config,

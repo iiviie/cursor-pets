@@ -67,8 +67,40 @@ async function loadStageAnim(id) {
   stageAnim = resolveManifest(m);
 }
 
-async function apply() {
-  await invoke("save_config", { config: cfg });
+// Throttle saves: dragging a slider fires many 'input' events, and each save
+// persists to disk + emits to the overlay. Apply the first change immediately
+// (snappy live feedback) then coalesce the rest to ~12/s with a trailing flush.
+let saveTimer = null;
+let savePending = false;
+function apply() {
+  if (saveTimer) {
+    savePending = true;
+    return;
+  }
+  flushSave();
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    if (savePending) {
+      savePending = false;
+      flushSave();
+    }
+  }, 80);
+}
+function flushSave() {
+  invoke("save_config", { config: cfg }).catch((e) => showStatus(String(e)));
+}
+
+let statusTimer = null;
+function showStatus(msg) {
+  const el = document.querySelector(".autosave");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = "var(--accent)";
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => {
+    el.textContent = "changes save automatically";
+    el.style.color = "";
+  }, 3200);
 }
 
 /* ---------- pet swatches ---------- */
@@ -125,7 +157,7 @@ async function importPet() {
   try {
     info = await invoke("import_pet");
   } catch (err) {
-    alert(String(err));
+    showStatus(String(err));
     return;
   }
   if (!info) return; // cancelled
@@ -139,7 +171,7 @@ async function deletePet(id) {
   try {
     await invoke("delete_pet", { id });
   } catch (err) {
-    alert(String(err));
+    showStatus(String(err));
     return;
   }
   petInfos = petInfos.filter((p) => p.id !== id);
@@ -207,15 +239,20 @@ function stageStep(ts) {
   const H = stageCanvas.height;
   const size = Math.round(TILE * RENDER_BASE * cfg.scale);
   const paceSpeed = 34; // px/s, gentle
-  px += dir * paceSpeed * dt;
   const left = size * 0.15;
   const right = W - size * 1.15;
-  if (px < left) {
-    px = left;
-    dir = 1;
-  } else if (px > right) {
-    px = right;
-    dir = -1;
+  if (right <= left) {
+    // Sprite is wider than the stage (large scale): just center it.
+    px = (W - size) / 2;
+  } else {
+    px += dir * paceSpeed * dt;
+    if (px < left) {
+      px = left;
+      dir = 1;
+    } else if (px > right) {
+      px = right;
+      dir = -1;
+    }
   }
   frameAcc += dt;
   if (frameAcc > 0.16) {

@@ -22,11 +22,11 @@ background.
   the way. No blur, no dimming, no window-layout disruption.
 - **Idle & sleep** — the pet does small, non-distracting idle fidgets and falls
   asleep (💤) after a while of inactivity, waking up the moment you move.
-- **5 retro pets** — `classic` cat, `dog`, `maia` (tabby), `tora` (tiger tabby),
-  and `vaporwave` — swappable live.
-- **Customization GUI** — pick your pet, set size, chase speed, follow distance,
-  and sleep timing, toggle following/sleeping. **Every change applies instantly**
-  to the running pet and is saved to disk.
+- **5 retro pets + your own** — `classic` cat, `dog`, `maia` (tabby), `tora`
+  (tiger tabby), and `vaporwave`, plus any sprite sheet you import. Swappable live.
+- **Customization GUI** — pick your pet, set size, opacity, chase speed, follow
+  distance, follow smoothness, and sleep timing, toggle following/sleeping/fidgets.
+  **Every change applies instantly** to the running pet and is saved to disk.
 - **System tray** — Customize…, Show / Hide Pet, and Quit.
 
 ## Screenshots
@@ -105,19 +105,57 @@ The pets use the classic **oneko** sprite sheets — an 8×4 grid of 32px tiles 
 idle, alert, sleep, scratch, and 8 walking directions — which is exactly the
 layout designed for a cursor-chasing pet. Sheets live in `src/sprites/`.
 
+## Footprint
+
+Measured on Linux (release build), idle, overlay only — real **PSS** (shared
+memory counted once, not the inflated RSS number):
+
+| Process | Memory (PSS) |
+| --- | --- |
+| `cursor-pet` (main) | ~113 MB |
+| WebKitWebProcess (overlay) | ~121 MB |
+| WebKitNetworkProcess | ~39 MB |
+| **Total, idle** | **~274 MB** |
+
+That's the WebKit floor for a webview overlay — roughly half of an equivalent
+Electron app. The **settings window is created on demand and destroyed on
+close**, so it costs nothing while you're not customizing. Idle CPU is
+effectively zero: the backend emits a cursor event only when the pointer
+actually moves, and the canvas repaints only when the sprite frame or position
+changes. The release binary is ~4 MB.
+
 ## Configuration
 
 The config is stored at `~/.config/dev.crosmos.cursorpet/config.json`:
 
 | Field | Meaning |
 | --- | --- |
-| `pet` | sprite sheet: `classic`/`dog`/`maia`/`tora`/`vaporwave` |
+| `pet` | sprite sheet: a built-in (`classic`/`dog`/`maia`/`tora`/`vaporwave`) or a custom pet id |
 | `scale` | rendered size multiplier |
+| `opacity` | sprite opacity, 0–1 |
 | `speed` | chase speed (logical px/s) |
 | `follow_gap` | distance from the cursor at which the pet stops |
+| `reaction` | follow smoothing in seconds — higher is calmer and ignores small jitters |
 | `follow` | whether the pet chases the cursor |
 | `sleep_enabled` | whether the pet sleeps when idle |
 | `idle_before_sleep` | seconds of idle before sleeping |
+| `fidget_enabled` | whether the pet does occasional idle fidgets |
+
+Values are clamped to sane ranges on load, so a hand-edited config can't break
+the pet.
+
+## Custom pets
+
+Click the **+** tile in the settings window to import your own sprite sheet — an
+8×4 grid of 32px tiles in the oneko layout (≥256×128, dimensions multiple of 32).
+It's copied into the app data dir and appears alongside the built-ins; the **×**
+on a custom swatch removes it.
+
+A custom pet can ship an optional **manifest** (`<sheet>.json` next to the PNG at
+import time) to override the tile size, the per-state frame map, and the
+walk/sleep animation speed — so a sheet with a different layout still animates
+correctly. Any omitted state falls back to the default oneko frames. See
+[`docs/example-pet-manifest.json`](docs/example-pet-manifest.json).
 
 ## Platform support
 
