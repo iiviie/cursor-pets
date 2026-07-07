@@ -1,260 +1,171 @@
-# 🐾 cursor-pet
+# cursor-pet
 
-A tiny, customizable **desktop pet** that lives on your screen and chases your
-cursor — a retro pixel cat (or dog!) that walks toward the mouse, sits and idles
-when it catches up, and curls up to sleep when you leave it alone.
+A small desktop pet that follows your cursor. It is a retro pixel cat (or dog)
+that walks toward your mouse, sits and idles when it catches up, and curls up to
+sleep when you leave it alone. Built with Rust and Tauri so it stays light.
 
-Built with **Rust + Tauri v2** for a small memory/CPU footprint. The pet and its
-customization GUI are one process: the settings window is only created when you
-open it and destroyed when you close it, so nothing heavy sits idle in the
-background.
+<video src="https://github.com/iiviie/cursor-pets/raw/main/docs/demo.mp4" controls muted loop width="820"></video>
 
-![demo](docs/demo.gif)
-
----
-
-## Features
-
-- **Cursor chasing** — the pet walks toward your cursor with 8-directional
-  animated sprites, then settles into a calm idle when it arrives.
-- **Non-intrusive by design** — the overlay is fully **click-through** and
-  **never steals focus**, so it lives above your work without ever getting in
-  the way. No blur, no dimming, no window-layout disruption.
-- **Idle & sleep** — the pet does small, non-distracting idle fidgets and falls
-  asleep (💤) after a while of inactivity, waking up the moment you move.
-- **5 retro pets + your own** — `classic` cat, `dog`, `maia` (tabby), `tora`
-  (tiger tabby), and `vaporwave`, plus any sprite sheet you import. Swappable live.
-- **Customization GUI** — pick your pet, set size, opacity, chase speed, follow
-  distance, follow smoothness, and sleep timing, toggle following/sleeping/fidgets.
-  **Every change applies instantly** to the running pet and is saved to disk.
-- **System tray** — Customize…, Show / Hide Pet, and Quit.
-- **Start on login** — a toggle in the settings window registers the app to
-  launch at login (cross-platform: an autostart `.desktop` on Linux, a `Run`
-  registry key on Windows, a Launch Agent on macOS).
-
-## Screenshots
-
-The customization GUI:
+If the video does not play above, here is the settings window:
 
 ![settings](docs/settings.png)
 
-The pet, following the cursor over whatever's on screen (here mid-customization,
-scaled up to the `vaporwave` cat):
+## What it does
 
-![overlay](docs/overlay.png)
+- Follows your cursor with animated pixel sprites, then settles into an idle when it arrives.
+- Stays out of the way. The overlay is click-through and never takes focus, so it sits on top of your work without blocking anything. No blur, no dimming.
+- Idles and sleeps. It does small idle movements and falls asleep after a while, then wakes up when you move the mouse.
+- Ships with 5 pets (classic cat, dog, maia, tora, vaporwave), and you can add your own sprite sheet.
+- Has a settings window for the pet, size, opacity, speed, follow distance, smoothness, and sleep timing. Changes apply right away and are saved to disk.
+- Lives in the system tray. From there you can open settings, hide the pet, check for updates, or quit.
+- Can start on login (Linux, Windows, and macOS).
 
 ## Install
 
-Grab the installer for your OS from the
-[**Releases**](https://github.com/iiviie/cursor-pets/releases) page:
+Download the file for your system from the
+[Releases](https://github.com/iiviie/cursor-pets/releases) page.
 
-| OS | Download | Notes |
-| --- | --- | --- |
-| **Linux** | `.deb` / `.rpm` or `.AppImage` | The `.deb`/`.rpm` pull in `webkit2gtk` automatically; the AppImage is a single portable file (`chmod +x`, then run). |
-| **Windows** | `.exe` (NSIS) | Per-user install, no admin. |
-| **macOS** | `.dmg` | Universal (Apple Silicon + Intel). |
+| System | File |
+| --- | --- |
+| Linux (Arch and others) | `cursor-pet_*_amd64.AppImage`. Make it executable (`chmod +x`) and run it. |
+| Debian / Ubuntu / Fedora | the `.deb` or `.rpm`, which pulls in `webkit2gtk` for you. |
+| Windows | `cursor-pet_*_x64-setup.exe` (or the `.msi`). |
+| macOS | `cursor-pet_*_universal.dmg` (Apple Silicon and Intel). |
 
-The builds are **unsigned** (no paid signing certs), so the OS shows a one-time
-"unknown developer" prompt the first time:
+The builds are not code-signed, so your OS shows a one-time warning the first
+time you open it:
 
-- **Windows** — SmartScreen → *More info* → *Run anyway*.
-- **macOS** — right-click the app → *Open* → *Open* (or
-  `xattr -dr com.apple.quarantine /Applications/cursor-pet.app`).
+- Windows: SmartScreen, click "More info" then "Run anyway".
+- macOS: right-click the app, then "Open", then "Open". Or run `xattr -dr com.apple.quarantine /Applications/cursor-pet.app`.
 
-Once running it lives in the **system tray** — no window. Left-click the tray
-icon (or right-click → *Customize…*) to open settings.
+Once it starts, it lives in the system tray. There is no window until you open
+settings (left-click the tray icon, or right-click for the menu).
 
 ### Updating
 
-cursor-pet **updates itself** from GitHub Releases: it checks quietly on launch
-and installs a newer version in the background (applied next start). You can also
-trigger it from the tray → *Check for updates…*.
+The app checks for a newer version on launch and installs it in the background,
+which takes effect the next time you start it. You can also run "Check for
+updates" from the tray menu.
 
-## Requirements (to build from source)
+## Build from source
 
-- A **Wayland** compositor for the best experience. Developed and tested on
-  **Hyprland** (uses Hyprland's IPC for the global cursor and window rules). See
-  [Platform support](#platform-support) for other setups.
-- **Rust** (1.77+), and system webkit2gtk (`webkit2gtk-4.1`) + GTK dev libraries
-  that Tauri needs.
-
-## Build & run
-
-No Node toolchain or Tauri CLI is required — the frontend is plain static
-HTML/CSS/JS embedded at compile time, so a plain `cargo` build produces the app:
+You do not need Node or the Tauri CLI. The frontend is plain static HTML, CSS,
+and JS embedded at build time, so a normal `cargo` build produces the whole app.
 
 ```bash
 cd src-tauri
-cargo build --release
-./target/release/cursor-pet
+cargo run --release        # run it
+cargo build --release      # or just build ./target/release/cursor-pet
 ```
 
-For development:
-
-```bash
-cd src-tauri
-cargo run
-```
-
-Open the customization window from the **tray icon** (left-click, or right-click →
-_Customize…_).
+You need Rust (1.77+) and the system libraries Tauri uses (`webkit2gtk-4.1` and
+GTK dev packages).
 
 ## How it works
 
-```
-┌──────────────────────── one process ────────────────────────┐
-│                                                              │
-│  Rust backend                        Frontend (webview)      │
-│  ────────────                        ─────────────────       │
-│  • reads global cursor from the      • pet.html — a full-     │
-│    Hyprland IPC socket (cheap,          screen transparent,   │
-│    no process spawning), emits          click-through canvas  │
-│    it to the overlay only on           • neko.js — sprite     │
-│    change                               sheet map + a chase/  │
-│  • system tray + config JSON            idle/sleep state      │
-│    (load/save)                          machine (physics)     │
-│  • creates the settings window        • settings.html — the   │
-│    on demand, destroys on close         customization GUI     │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
+One process runs everything. A fullscreen, transparent, click-through window
+draws the pet, and the settings window is created only when you open it and
+destroyed when you close it, so nothing heavy sits idle in the background.
 
-- The **overlay** is a transparent, always-on-top, click-through window covering
-  the whole screen. The sprite is drawn on a single static canvas that is cleared
-  and repainted each frame (moving a small transformed element instead leaves a
-  trail on webkit's transparent surface).
-- The backend streams the **global cursor position** to the overlay; the canvas
-  runs the physics and animation. When the cursor is still, no events are sent —
-  an idle desktop costs effectively nothing.
-- Settings changes call a `save_config` command that persists the config and
-  emits `config-changed`; the overlay applies it live.
-
-### Sprites
-
-The pets use the classic **oneko** sprite sheets — an 8×4 grid of 32px tiles with
-idle, alert, sleep, scratch, and 8 walking directions — which is exactly the
-layout designed for a cursor-chasing pet. Sheets live in `src/sprites/`.
+The Rust side reads the global cursor position and sends it to the overlay only
+when it changes, so an idle desktop sends nothing. The overlay runs the movement
+and animation. The pet itself is a `div` with the sprite sheet as its background,
+moved with a CSS transform, the same approach oneko.js uses. (A transparent
+`<canvas>` on this overlay left trails or black boxes depending on the WebKit
+renderer, so the div is both simpler and cleaner.)
 
 ## Footprint
 
-Measured on Linux (release build), idle, overlay only — real **PSS** (shared
-memory counted once, not the inflated RSS number):
+Measured on Linux, release build, idle, overlay only. These are real PSS numbers
+(shared memory counted once, not the inflated RSS figure).
 
-| Process | Memory (PSS) |
+| Process | Memory |
 | --- | --- |
-| `cursor-pet` (main) | ~113 MB |
-| WebKitWebProcess (overlay) | ~121 MB |
+| cursor-pet (main) | ~113 MB |
+| WebKitWebProcess | ~121 MB |
 | WebKitNetworkProcess | ~39 MB |
-| **Total, idle** | **~274 MB** |
+| Total | ~274 MB |
 
-That's the WebKit floor for a webview overlay — roughly half of an equivalent
-Electron app. The **settings window is created on demand and destroyed on
-close**, so it costs nothing while you're not customizing. Idle CPU is
-effectively zero: the backend emits a cursor event only when the pointer
-actually moves, and the canvas repaints only when the sprite frame or position
-changes. The release binary is ~4 MB.
+That is the WebKit floor for a webview app, roughly half of a comparable
+Electron app. It is not tiny. The settings window costs nothing while closed,
+and idle CPU is close to zero because events only fire when the cursor moves.
+The binary on disk is about 5 MB.
 
 ## Configuration
 
-The config is stored at `~/.config/dev.crosmos.cursorpet/config.json`:
+Settings are saved to `~/.config/dev.crosmos.cursorpet/config.json`.
 
 | Field | Meaning |
 | --- | --- |
-| `pet` | sprite sheet: a built-in (`classic`/`dog`/`maia`/`tora`/`vaporwave`) or a custom pet id |
-| `scale` | rendered size multiplier |
-| `opacity` | sprite opacity, 0–1 |
-| `speed` | chase speed (logical px/s) |
-| `follow_gap` | distance from the cursor at which the pet stops |
-| `reaction` | follow smoothing in seconds — higher is calmer and ignores small jitters |
+| `pet` | which sprite sheet to use, a built-in or a custom id |
+| `scale` | rendered size |
+| `opacity` | sprite opacity, 0 to 1 |
+| `speed` | chase speed in logical pixels per second |
+| `follow_gap` | how far from the cursor the pet stops |
+| `reaction` | follow smoothing in seconds; higher is calmer and ignores small jitter |
 | `follow` | whether the pet chases the cursor |
-| `sleep_enabled` | whether the pet sleeps when idle |
-| `idle_before_sleep` | seconds of idle before sleeping |
-| `fidget_enabled` | whether the pet does occasional idle fidgets |
+| `sleep_enabled` | whether it sleeps when idle |
+| `idle_before_sleep` | seconds of idle before it sleeps |
+| `fidget_enabled` | whether it does occasional idle movements |
 
-Values are clamped to sane ranges on load, so a hand-edited config can't break
-the pet.
+Values are clamped on load, so a hand-edited config cannot break the pet.
 
 ## Custom pets
 
-Click the **+** tile in the settings window to import your own sprite sheet — an
-8×4 grid of 32px tiles in the oneko layout (≥256×128, dimensions multiple of 32).
-It's copied into the app data dir and appears alongside the built-ins; the **×**
-on a custom swatch removes it.
+Click the `+` tile in the settings window to import your own sprite sheet. It
+should be an 8x4 grid of 32px tiles in the oneko layout (at least 256x128, with
+both dimensions a multiple of 32). It is copied into the app data folder and
+shows up next to the built-in pets. The `x` on a custom pet removes it.
 
-A custom pet can ship an optional **manifest** (`<sheet>.json` next to the PNG at
-import time) to override the tile size, the per-state frame map, and the
-walk/sleep animation speed — so a sheet with a different layout still animates
-correctly. Any omitted state falls back to the default oneko frames. See
-[`docs/example-pet-manifest.json`](docs/example-pet-manifest.json).
+A custom pet can include an optional manifest (`<sheet>.json` next to the PNG at
+import time) to override the tile size, the frame map per state, and the
+walk/sleep animation speed. Any state you leave out falls back to the default
+oneko frames. See [docs/example-pet-manifest.json](docs/example-pet-manifest.json).
 
-## Platform support
+## Platforms
 
-cursor-pet is written to run on Linux, Windows, and macOS. The platform-specific
-bits (global cursor + overlay placement) live behind a small abstraction
-(`src-tauri/src/cursor.rs` → `CursorSource`), so the rest of the app is shared.
+Written to run on Linux, Windows, and macOS. The platform-specific parts (the
+global cursor and overlay placement) live behind one small abstraction in
+`src-tauri/src/cursor.rs`.
 
-| Platform | Status | Global cursor | Overlay |
-| --- | --- | --- | --- |
-| **Linux / Hyprland** | ✅ tested | Hyprland IPC (`cursorpos`, logical coords) | Hyprland window rules (float/pin/no-blur/no-focus) + native Wayland |
-| **Windows** | ⚠️ implemented, needs testing | `device_query` (`GetCursorPos`) | native always-on-top transparent click-through window sized to the monitor |
-| **macOS** | ⚠️ implemented, needs testing | `device_query` (Core Graphics) | same, with `macOSPrivateApi` for the transparent window |
-| **Linux / other WMs** | partial | `device_query` (needs X11 / XWayland) | native flags; window rules are Hyprland-only |
+| Platform | State | Notes |
+| --- | --- | --- |
+| Linux / Hyprland | tested | Reads the cursor from Hyprland's IPC. Window rules float, pin, and un-blur the overlay. |
+| Windows | built, needs real-world testing | Cursor via `GetCursorPos`, a native always-on-top transparent window. |
+| macOS | built, needs real-world testing | Cursor via Core Graphics. Needs Accessibility permission to read the cursor. |
+| Other Linux desktops | partial | Cursor via `device_query` (X11 or XWayland). A pure Wayland session without XWayland has no portable way to read the global cursor. |
 
-Per-OS requirements:
-
-- **Windows** — no extra setup; ships as a normal `.exe`. Build needs the MSVC
-  or GNU toolchain.
-- **macOS** — the app needs **Accessibility** permission (System Settings →
-  Privacy & Security → Accessibility) for `device_query` to read the global
-  cursor. Transparent windows require `macOSPrivateApi` (already enabled), which
-  means it can't ship on the Mac App Store — fine for a personal/desktop tool.
-- **Linux (non-Hyprland)** — `device_query` reads the pointer via X11, so it
-  works on X11 sessions and under XWayland. A pure-Wayland session without
-  XWayland has no portable global-cursor API and isn't supported.
-
-Multi-monitor and fractional scaling beyond the primary output are known
-follow-ups on every platform.
+Multi-monitor and fractional scaling past the primary output are still to do.
 
 ## Releasing (maintainers)
 
-Releases are built by GitHub Actions (`.github/workflows/release.yml`) on every
-`v*` tag — a matrix build produces the Linux/Windows/macOS installers, signs the
-updater artifacts, generates `latest.json`, and attaches everything to a **draft**
-GitHub Release for you to review and publish.
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the
+installers for all three systems, signs the updater files, generates
+`latest.json`, and attaches everything to a draft GitHub Release.
 
-**One-time setup** — add **one** repository secret (Settings → Secrets and
-variables → Actions) so the updater artifacts can be signed:
+Add one repository secret (Settings, then Secrets and variables, then Actions):
 
 | Secret | Value |
 | --- | --- |
-| `TAURI_SIGNING_PRIVATE_KEY` | contents of the updater private key (kept locally at `~/.cursorpet-updater.key`, **never committed**) |
+| `TAURI_SIGNING_PRIVATE_KEY` | contents of the updater private key, kept locally and never committed |
 
-Do **not** create `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — this key has no
-password, and GitHub won't save an empty secret. The workflow references it, but
-an unset secret resolves to an empty string, which the signer accepts as
-"no password". (If you'd rather set a password, regenerate the key with
-`tauri signer generate -p <password>`, update the pubkey in
-`src-tauri/tauri.conf.json`, and then set both secrets.)
+Do not add a `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret. This key has no
+password, and GitHub cannot store an empty secret. The workflow references it,
+but an unset secret resolves to an empty string, which the signer accepts.
 
-The matching **public** key is embedded in `src-tauri/tauri.conf.json`
-(`plugins.updater.pubkey`). If you ever regenerate the keypair
-(`tauri signer generate`), update the pubkey there and the secret in CI.
-
-**Cut a release:**
+To cut a release, bump `version` in `src-tauri/tauri.conf.json`, then:
 
 ```bash
-# bump "version" in src-tauri/tauri.conf.json first, then:
 git tag v0.1.0
 git push origin v0.1.0
-# CI builds all platforms → review the draft release → publish.
 ```
 
-Publishing the release makes `latest.json` live, and running apps will pick up
-the update on their next launch.
+When CI finishes, open the draft release, review it, and publish. Publishing
+makes `latest.json` live so running apps pick up the update on their next start.
 
 ## Credits
 
-- Sprite sheets from the **oneko** project (the classic cursor-chasing neko),
-  bundled via [`kyrie25/spicetify-oneko`](https://github.com/kyrie25/spicetify-oneko);
-  original oneko.js by [`adryd325`](https://github.com/adryd325/oneko.js).
+- Sprite sheets are from the oneko project, the classic cursor-chasing neko,
+  bundled via [kyrie25/spicetify-oneko](https://github.com/kyrie25/spicetify-oneko).
+  The original oneko.js is by [adryd325](https://github.com/adryd325/oneko.js).
 - Built with [Tauri](https://tauri.app).
