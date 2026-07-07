@@ -102,18 +102,23 @@ export class NekoBrain {
     const a = react <= 0 ? 1 : Math.min(1, dt / react);
     this.tx += (this.cursorX - this.tx) * a;
     this.ty += (this.cursorY - this.ty) * a;
+    // Exponential easing only *approaches* the cursor, never reaches it — so
+    // snap once we're within a sub-pixel. Otherwise the pet micro-chases a
+    // forever-creeping target and animates a walk in place indefinitely.
+    if (Math.abs(this.cursorX - this.tx) < 0.75) this.tx = this.cursorX;
+    if (Math.abs(this.cursorY - this.ty) < 0.75) this.ty = this.cursorY;
 
     const dx = this.tx - this.x;
     const dy = this.ty - this.y;
     const dist = Math.hypot(dx, dy);
     const gap = this.cfg.follow_gap;
     // Hysteresis: start chasing only once clearly beyond the gap, but keep
-    // going until we're back inside it. Without this the pet flickers between
-    // walk and idle (looks like "running in place") right at the boundary.
-    const margin = Math.max(10, gap * 0.4);
+    // going until we're back inside it (with a tiny tolerance so floating-point
+    // residue can't keep us a hair over the gap forever).
+    const margin = Math.max(8, gap * 0.25);
     const chasing = this.state === "chase" || this.state === "wake";
     const shouldChase =
-      this.cfg.follow && (chasing ? dist > gap : dist > gap + margin);
+      this.cfg.follow && (chasing ? dist > gap + 0.5 : dist > gap + margin);
 
     if (shouldChase) {
       if (this.state === "sleep" || this.state === "tired") {
@@ -137,10 +142,14 @@ export class NekoBrain {
       }
       this.idleTime = 0;
 
-      this.frameTimer += dt;
-      if (this.frameTimer > 1 / this.anim.walkFps) {
-        this.frameTimer = 0;
-        this.frameIndex ^= 1;
+      // Only advance the walk cycle when actually travelling a meaningful
+      // amount this frame — so the legs never pump while standing still.
+      if (step > 0.35) {
+        this.frameTimer += dt;
+        if (this.frameTimer > 1 / this.anim.walkFps) {
+          this.frameTimer = 0;
+          this.frameIndex ^= 1;
+        }
       }
       return this.dir;
     }
