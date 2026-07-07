@@ -55,8 +55,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             pet: "classic".into(),
-            scale: 0.7,
-            speed: 220.0,
+            scale: 0.6,
+            speed: 100.0,
             follow_gap: 70.0,
             reaction: 0.16,
             opacity: 1.0,

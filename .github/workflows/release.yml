@@ -65,10 +65,12 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Signs the updater artifacts so the app trusts them. Add these as
-          # repository secrets (Settings → Secrets and variables → Actions):
-          #   TAURI_SIGNING_PRIVATE_KEY          -> contents of ~/.cursorpet-updater.key
-          #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD -> "" (this key has no password)
+          # Signs the updater artifacts so the app trusts them. Add ONE repo
+          # secret (Settings → Secrets and variables → Actions):
+          #   TAURI_SIGNING_PRIVATE_KEY -> contents of ~/.cursorpet-updater.key
+          # The key has no password, so DON'T create the *_PASSWORD secret
+          # (GitHub can't store an empty value). An unset secret resolves to ""
+          # here, which the signer accepts as "no password".
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:

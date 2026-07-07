@@ -222,13 +222,19 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`) on every
 updater artifacts, generates `latest.json`, and attaches everything to a **draft**
 GitHub Release for you to review and publish.
 
-**One-time setup** — add two repository secrets (Settings → Secrets and variables
-→ Actions) so the updater artifacts can be signed:
+**One-time setup** — add **one** repository secret (Settings → Secrets and
+variables → Actions) so the updater artifacts can be signed:
 
 | Secret | Value |
 | --- | --- |
 | `TAURI_SIGNING_PRIVATE_KEY` | contents of the updater private key (kept locally at `~/.cursorpet-updater.key`, **never committed**) |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | empty string (this key has no password) |
+
+Do **not** create `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — this key has no
+password, and GitHub won't save an empty secret. The workflow references it, but
+an unset secret resolves to an empty string, which the signer accepts as
+"no password". (If you'd rather set a password, regenerate the key with
+`tauri signer generate -p <password>`, update the pubkey in
+`src-tauri/tauri.conf.json`, and then set both secrets.)
 
 The matching **public** key is embedded in `src-tauri/tauri.conf.json`
 (`plugins.updater.pubkey`). If you ever regenerate the keypair
