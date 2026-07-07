@@ -4,9 +4,10 @@ A small desktop pet that follows your cursor. It is a retro pixel cat (or dog)
 that walks toward your mouse, sits and idles when it catches up, and curls up to
 sleep when you leave it alone. Built with Rust and Tauri so it stays light.
 
-<video src="https://github.com/iiviie/cursor-pets/raw/main/docs/demo.mp4" controls muted loop width="820"></video>
+![demo](docs/demo.gif)
 
-If the video does not play above, here is the settings window:
+The clip shows the pet following the cursor and the settings window. There is
+also a [higher quality version](docs/demo.mp4). The settings window on its own:
 
 ![settings](docs/settings.png)
 
