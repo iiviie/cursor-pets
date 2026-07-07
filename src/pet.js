@@ -60,7 +60,8 @@ function draw(spriteName) {
   const [sx, sy] = brain.currentTile(spriteName);
   const px = Math.round(brain.x - renderSize / 2);
   const py = Math.round(brain.y - renderSize / 2);
-  const key = `${currentPet}:${spriteName}:${brain.frameIndex}:${px}:${py}:${renderSize}`;
+  const alpha = cfg.opacity ?? 1;
+  const key = `${currentPet}:${spriteName}:${brain.frameIndex}:${px}:${py}:${renderSize}:${alpha}`;
   if (key === lastKey || !spriteReady) return;
   lastKey = key;
 
@@ -68,7 +69,9 @@ function draw(spriteName) {
   // cheaper but webkit's damage handling on a transparent surface leaves
   // trails, so we clear everything.)
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.globalAlpha = alpha;
   ctx.drawImage(sprite, sx, sy, TILE, TILE, px, py, renderSize, renderSize);
+  ctx.globalAlpha = 1;
   lastRect = { x: px, y: py, w: renderSize, h: renderSize };
 }
 

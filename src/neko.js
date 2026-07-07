@@ -1,6 +1,7 @@
 // Shared oneko sprite logic: sprite-sheet layout + a small state machine that
 // drives chasing / idling / sleeping. Ported and adapted from adryd325/oneko.js
-// (which the sprite sheets come from) to a delta-time, config-driven model.
+// (which the sprite sheets come from) to a delta-time, config-driven model with
+// smoothing so it doesn't twitch when you nudge the mouse.
 
 // Each sheet is an 8x4 grid of 32px tiles. Coordinates below are given as the
 // oneko-style negative background offsets (in tile units); the source rect in
@@ -27,7 +28,7 @@ export const SPRITES = {
   NW: [[-1, 0], [-1, -1]],
 };
 
-// Deterministic-ish direction from a normalized toward-target vector.
+// Direction from a normalized toward-target vector (screen y points down).
 function directionKey(nx, ny) {
   let v = "";
   if (ny < -0.45) v = "N";
@@ -42,18 +43,19 @@ function directionKey(nx, ny) {
 export class NekoBrain {
   constructor(cfg) {
     this.cfg = cfg;
-    this.x = 0;
+    this.x = 0; // pet position
     this.y = 0;
-    this.targetX = 0;
-    this.targetY = 0;
+    this.tx = 0; // smoothed target the pet actually chases
+    this.ty = 0;
+    this.cursorX = 0; // latest raw cursor
+    this.cursorY = 0;
     this.state = "idle"; // idle | chase | groom | tired | sleep | wake
     this.dir = "S";
     this.idleTime = 0;
     this.frameTimer = 0;
     this.frameIndex = 0;
     this.stateTimer = 0;
-    // seed for the next spontaneous idle fidget
-    this.nextFidget = 3 + Math.random() * 6;
+    this.nextFidget = 4 + Math.random() * 7;
   }
 
   setConfig(cfg) {
@@ -61,28 +63,38 @@ export class NekoBrain {
   }
 
   place(x, y) {
-    this.x = x;
-    this.y = y;
-    this.targetX = x;
-    this.targetY = y;
+    this.x = this.tx = this.cursorX = x;
+    this.y = this.ty = this.cursorY = y;
   }
 
   setTarget(x, y) {
-    this.targetX = x;
-    this.targetY = y;
+    this.cursorX = x;
+    this.cursorY = y;
   }
 
   // Advance the simulation by dt seconds. Returns the sprite name to render.
   update(dt) {
-    const dx = this.targetX - this.x;
-    const dy = this.targetY - this.y;
+    // Ease the chased target toward the real cursor. This is the "reaction
+    // delay": with reaction > 0 the pet lags slightly and ignores tiny jitter
+    // instead of snapping to every sub-pixel cursor change.
+    const react = this.cfg.reaction ?? 0.15;
+    const a = react <= 0 ? 1 : Math.min(1, dt / react);
+    this.tx += (this.cursorX - this.tx) * a;
+    this.ty += (this.cursorY - this.ty) * a;
+
+    const dx = this.tx - this.x;
+    const dy = this.ty - this.y;
     const dist = Math.hypot(dx, dy);
     const gap = this.cfg.follow_gap;
-
-    const shouldChase = this.cfg.follow && dist > gap;
+    // Hysteresis: start chasing only once clearly beyond the gap, but keep
+    // going until we're back inside it. Without this the pet flickers between
+    // walk and idle (looks like "running in place") right at the boundary.
+    const margin = Math.max(10, gap * 0.4);
+    const chasing = this.state === "chase" || this.state === "wake";
+    const shouldChase =
+      this.cfg.follow && (chasing ? dist > gap : dist > gap + margin);
 
     if (shouldChase) {
-      // Waking from sleep first flashes an "alert" beat.
       if (this.state === "sleep" || this.state === "tired") {
         this.enter("wake");
       } else if (this.state !== "chase" && this.state !== "wake") {
@@ -94,16 +106,16 @@ export class NekoBrain {
         return "alert";
       }
 
-      // Move toward the cursor, stopping at the follow gap.
       const step = Math.min(this.cfg.speed * dt, dist - gap);
-      const nx = dx / dist;
-      const ny = dy / dist;
-      this.x += nx * step;
-      this.y += ny * step;
-      this.dir = directionKey(nx, ny);
+      if (dist > 0.001) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        this.x += nx * step;
+        this.y += ny * step;
+        if (step > 0.4) this.dir = directionKey(nx, ny);
+      }
       this.idleTime = 0;
 
-      // Alternate the two walk frames.
       this.frameTimer += dt;
       if (this.frameTimer > 0.13) {
         this.frameTimer = 0;
@@ -119,12 +131,10 @@ export class NekoBrain {
     this.frameTimer += dt;
 
     if (this.state === "groom") {
-      const frames = SPRITES.scratchSelf.length;
       if (this.frameTimer > 0.12) {
         this.frameTimer = 0;
         this.frameIndex++;
       }
-      // Groom for a couple of cycles then settle.
       if (this.stateTimer > 0.9) {
         this.frameIndex = 0;
         this.enter("idle");
@@ -146,11 +156,10 @@ export class NekoBrain {
       return "sleeping";
     }
 
-    // Plain sitting idle, with the occasional short grooming fidget so the
-    // pet feels alive without being distracting.
+    // Plain sitting idle, with the occasional short grooming fidget.
     this.state = "idle";
-    if (this.idleTime > this.nextFidget) {
-      this.nextFidget = this.idleTime + 5 + Math.random() * 8;
+    if (this.cfg.fidget_enabled !== false && this.idleTime > this.nextFidget) {
+      this.nextFidget = this.idleTime + 6 + Math.random() * 9;
       this.enter("groom");
       return "scratchSelf";
     }
@@ -164,7 +173,7 @@ export class NekoBrain {
     this.frameIndex = 0;
   }
 
-  // Resolve (sprite name, animation frames) -> the current [col,row] tile.
+  // Resolve (sprite name) -> the current [srcX, srcY] tile in the sheet.
   currentTile(sprite) {
     const frames = SPRITES[sprite] || SPRITES.idle;
     const idx = this.frameIndex % frames.length;

@@ -28,7 +28,7 @@ pub const PETS: &[&str] = &["classic", "dog", "maia", "tora", "vaporwave"];
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct Config {
-    /// Which sprite sheet to use (one of `PETS`).
+    /// Which sprite sheet to use (a built-in in `PETS` or a custom pet id).
     pub pet: String,
     /// Rendered sprite scale (1.0 == 32px tile drawn at 64px base).
     pub scale: f64,
@@ -36,24 +36,34 @@ pub struct Config {
     pub speed: f64,
     /// Distance (px) from cursor at which the pet stops and idles.
     pub follow_gap: f64,
+    /// Cursor-follow smoothing time in seconds. Higher = laggier/calmer; the
+    /// pet chases a smoothed target so slow mouse wiggles don't make it twitch.
+    pub reaction: f64,
+    /// Sprite opacity, 0..1 (1 = fully opaque).
+    pub opacity: f64,
     /// Master follow toggle.
     pub follow: bool,
     /// Whether the pet may fall asleep after idling.
     pub sleep_enabled: bool,
     /// Seconds of idle before the pet gets tired / sleeps.
     pub idle_before_sleep: f64,
+    /// Whether the pet does occasional idle fidgets (grooming).
+    pub fidget_enabled: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             pet: "classic".into(),
-            scale: 1.0,
-            speed: 480.0,
-            follow_gap: 42.0,
+            scale: 0.7,
+            speed: 220.0,
+            follow_gap: 70.0,
+            reaction: 0.16,
+            opacity: 1.0,
             follow: true,
             sleep_enabled: true,
             idle_before_sleep: 6.0,
+            fidget_enabled: true,
         }
     }
 }
@@ -160,6 +170,10 @@ fn apply_overlay_rules(sock: &PathBuf, w: i32, h: i32) {
         "no_anim on".to_string(),
         "no_focus on".to_string(),
         "no_initial_focus on".to_string(),
+        // Force full opacity so the compositor's inactive_opacity (our overlay
+        // is never focused) doesn't make the sprite translucent. Per-pet
+        // opacity is applied in the canvas instead.
+        "opacity 1.0 override 1.0 override 1.0".to_string(),
         "rounding 0".to_string(),
         format!("size {w} {h}"),
         "move 0 0".to_string(),
