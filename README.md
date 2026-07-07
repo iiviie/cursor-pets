@@ -43,11 +43,38 @@ scaled up to the `vaporwave` cat):
 
 ![overlay](docs/overlay.png)
 
-## Requirements
+## Install
 
-- A **Wayland** compositor. Developed and tested on **Hyprland** (uses Hyprland's
-  IPC for the global cursor position and for window rules). See
-  [Portability](#portability) for other setups.
+Grab the installer for your OS from the
+[**Releases**](https://github.com/iiviie/cursor-pets/releases) page:
+
+| OS | Download | Notes |
+| --- | --- | --- |
+| **Linux** | `.deb` / `.rpm` or `.AppImage` | The `.deb`/`.rpm` pull in `webkit2gtk` automatically; the AppImage is a single portable file (`chmod +x`, then run). |
+| **Windows** | `.exe` (NSIS) | Per-user install, no admin. |
+| **macOS** | `.dmg` | Universal (Apple Silicon + Intel). |
+
+The builds are **unsigned** (no paid signing certs), so the OS shows a one-time
+"unknown developer" prompt the first time:
+
+- **Windows** — SmartScreen → *More info* → *Run anyway*.
+- **macOS** — right-click the app → *Open* → *Open* (or
+  `xattr -dr com.apple.quarantine /Applications/cursor-pet.app`).
+
+Once running it lives in the **system tray** — no window. Left-click the tray
+icon (or right-click → *Customize…*) to open settings.
+
+### Updating
+
+cursor-pet **updates itself** from GitHub Releases: it checks quietly on launch
+and installs a newer version in the background (applied next start). You can also
+trigger it from the tray → *Check for updates…*.
+
+## Requirements (to build from source)
+
+- A **Wayland** compositor for the best experience. Developed and tested on
+  **Hyprland** (uses Hyprland's IPC for the global cursor and window rules). See
+  [Platform support](#platform-support) for other setups.
 - **Rust** (1.77+), and system webkit2gtk (`webkit2gtk-4.1`) + GTK dev libraries
   that Tauri needs.
 
@@ -187,6 +214,37 @@ Per-OS requirements:
 
 Multi-monitor and fractional scaling beyond the primary output are known
 follow-ups on every platform.
+
+## Releasing (maintainers)
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`) on every
+`v*` tag — a matrix build produces the Linux/Windows/macOS installers, signs the
+updater artifacts, generates `latest.json`, and attaches everything to a **draft**
+GitHub Release for you to review and publish.
+
+**One-time setup** — add two repository secrets (Settings → Secrets and variables
+→ Actions) so the updater artifacts can be signed:
+
+| Secret | Value |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | contents of the updater private key (kept locally at `~/.cursorpet-updater.key`, **never committed**) |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | empty string (this key has no password) |
+
+The matching **public** key is embedded in `src-tauri/tauri.conf.json`
+(`plugins.updater.pubkey`). If you ever regenerate the keypair
+(`tauri signer generate`), update the pubkey there and the secret in CI.
+
+**Cut a release:**
+
+```bash
+# bump "version" in src-tauri/tauri.conf.json first, then:
+git tag v0.1.0
+git push origin v0.1.0
+# CI builds all platforms → review the draft release → publish.
+```
+
+Publishing the release makes `latest.json` live, and running apps will pick up
+the update on their next launch.
 
 ## Credits
 
